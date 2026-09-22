@@ -108,6 +108,48 @@ export const paperAlertEventsTable = pgTable(
   }),
 );
 
+export const paperTradeJournalsTable = pgTable(
+  "paper_trade_journals",
+  {
+    id: serial("id").primaryKey(),
+    accountId: integer("account_id").notNull().references(() => paperAccountsTable.id),
+    tradeId: integer("trade_id").notNull().references(() => paperTradesTable.id),
+    entryTime: timestamp("entry_time", { withTimezone: true }).notNull(),
+    exitTime: timestamp("exit_time", { withTimezone: true }).notNull(),
+    symbol: text("symbol").notNull(),
+    timeframe: text("timeframe").notNull(),
+    direction: text("direction").notNull(),
+    scenario: text("scenario").notNull(),
+    entryReason: text("entry_reason").notNull(),
+    ema21: numeric("ema21", { precision: 20, scale: 8 }).notNull(),
+    ema50: numeric("ema50", { precision: 20, scale: 8 }).notNull(),
+    rsi14: numeric("rsi14", { precision: 12, scale: 8 }).notNull(),
+    macd: numeric("macd", { precision: 20, scale: 8 }).notNull(),
+    macdSignal: numeric("macd_signal", { precision: 20, scale: 8 }).notNull(),
+    macdHistogram: numeric("macd_histogram", { precision: 20, scale: 8 }).notNull(),
+    candleVolume: numeric("candle_volume", { precision: 30, scale: 8 }).notNull(),
+    averageVolume20: numeric("average_volume_20", { precision: 30, scale: 8 }).notNull(),
+    volumeRatio20: numeric("volume_ratio_20", { precision: 12, scale: 8 }).notNull(),
+    support: numeric("support", { precision: 20, scale: 8 }).notNull(),
+    resistance: numeric("resistance", { precision: 20, scale: 8 }).notNull(),
+    result: text("result").notNull(),
+    pnl: numeric("pnl", { precision: 20, scale: 8 }).notNull(),
+    durationSeconds: integer("duration_seconds").notNull(),
+    rMultiple: numeric("r_multiple", { precision: 20, scale: 8 }).notNull(),
+    confirmedFactors: jsonb("confirmed_factors").$type<string[]>().notNull(),
+    errorFactors: jsonb("error_factors").$type<string[]>().notNull(),
+    tradeClass: text("trade_class").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    tradeIdentity: uniqueIndex("paper_trade_journal_trade_identity").on(table.tradeId),
+    accountCreatedAt: index("paper_trade_journal_account_created_at").on(
+      table.accountId,
+      table.createdAt,
+    ),
+  }),
+);
+
 export const paperScenarioObservationsTable = pgTable(
   "paper_scenario_observations",
   {
@@ -148,6 +190,10 @@ export const insertPaperAlertEventSchema = createInsertSchema(paperAlertEventsTa
   id: true,
   createdAt: true,
 });
+export const insertPaperTradeJournalSchema = createInsertSchema(paperTradeJournalsTable).omit({
+  id: true,
+  createdAt: true,
+});
 
 export type InsertPaperAccount = z.infer<typeof insertPaperAccountSchema>;
 export type InsertPaperTrade = z.infer<typeof insertPaperTradeSchema>;
@@ -156,8 +202,10 @@ export type InsertPaperScenarioObservation = z.infer<
 >;
 export type InsertPaperAlertRecipient = z.infer<typeof insertPaperAlertRecipientSchema>;
 export type InsertPaperAlertEvent = z.infer<typeof insertPaperAlertEventSchema>;
+export type InsertPaperTradeJournal = z.infer<typeof insertPaperTradeJournalSchema>;
 export type PaperAccount = typeof paperAccountsTable.$inferSelect;
 export type PaperTrade = typeof paperTradesTable.$inferSelect;
 export type PaperScenarioObservation = typeof paperScenarioObservationsTable.$inferSelect;
 export type PaperAlertRecipient = typeof paperAlertRecipientsTable.$inferSelect;
 export type PaperAlertEvent = typeof paperAlertEventsTable.$inferSelect;
+export type PaperTradeJournal = typeof paperTradeJournalsTable.$inferSelect;
