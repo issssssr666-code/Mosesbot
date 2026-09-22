@@ -13,7 +13,7 @@ type BinanceTicker = {
   quoteVolume: string;
 };
 
-type BinanceKline = [
+export type BinanceKline = [
   number,
   string,
   string,
@@ -24,7 +24,7 @@ type BinanceKline = [
   string,
 ];
 
-type TechnicalPoint = {
+export type TechnicalPoint = {
   openTime: number;
   closeTime: number;
   close: number;
@@ -37,6 +37,17 @@ type TechnicalPoint = {
   macd: number | null;
   signal: number | null;
   histogram: number | null;
+};
+
+export type BtcStrategySnapshot = {
+  point: TechnicalPoint;
+  averageVolume20: number;
+  volumeRatio20: number;
+  support: number;
+  resistance: number;
+  trend: string;
+  impulse: string;
+  scenario: string;
 };
 
 export type AnalysisSection = {
@@ -188,7 +199,7 @@ const calculateRsi = (values: number[], period = 14): (number | null)[] => {
   return result;
 };
 
-const calculatePoints = (candles: BinanceKline[]): TechnicalPoint[] => {
+export const calculateTechnicalPoints = (candles: BinanceKline[]): TechnicalPoint[] => {
   const closes = candles.map((candle) => Number(candle[4]));
   const ema21 = calculateEma(closes, 21);
   const ema50 = calculateEma(closes, 50);
@@ -228,6 +239,76 @@ const calculatePoints = (candles: BinanceKline[]): TechnicalPoint[] => {
           : null,
     };
   });
+};
+
+export const buildBtcStrategySnapshot = (
+  points: TechnicalPoint[],
+  index = points.length - 1,
+  priceOverride?: number,
+): BtcStrategySnapshot => {
+  const point = points[index];
+  if (
+    !point ||
+    point.ema21 === null ||
+    point.ema50 === null ||
+    point.rsi14 === null ||
+    point.macd === null ||
+    point.signal === null ||
+    point.histogram === null
+  ) {
+    throw new BtcMarketDataError(
+      "Недостаточно свечей Binance для расчёта стратегии",
+      "invalid",
+    );
+  }
+
+  const price = priceOverride ?? point.close;
+  const recent = points.slice(Math.max(0, index - 49), index + 1);
+  const recentVolume = points.slice(Math.max(0, index - 19), index + 1);
+  const averageVolume20 =
+    recentVolume.reduce((sum, recentPoint) => sum + recentPoint.volume, 0) /
+    recentVolume.length;
+  const volumeRatio20 = averageVolume20 > 0 ? point.volume / averageVolume20 : 1;
+  const support = Math.min(...recent.map((recentPoint) => recentPoint.low));
+  const resistance = Math.max(...recent.map((recentPoint) => recentPoint.high));
+  const trend =
+    price > point.ema21 && point.ema21 > point.ema50
+      ? "Восходящий"
+      : price < point.ema21 && point.ema21 < point.ema50
+        ? "Нисходящий"
+        : "Боковой";
+  const macdAboveSignal = point.macd >= point.signal;
+  const impulse =
+    macdAboveSignal && point.rsi14 >= 50
+      ? "Положительный"
+      : !macdAboveSignal && point.rsi14 < 50
+        ? "Отрицательный"
+        : "Смешанный";
+  const supportDistance = ((price - support) / price) * 100;
+  const resistanceDistance = ((resistance - price) / price) * 100;
+  const trendScore = trend === "Восходящий" ? 2 : trend === "Нисходящий" ? -2 : 0;
+  const impulseScore = impulse === "Положительный" ? 1 : impulse === "Отрицательный" ? -1 : 0;
+  const volumeScore =
+    volumeRatio20 >= 1.2 ? (trendScore > 0 ? 1 : trendScore < 0 ? -1 : 0) : 0;
+  const levelScore = resistanceDistance <= 2 ? -1 : supportDistance <= 2 ? 1 : 0;
+  const scenarioScore = trendScore + impulseScore + volumeScore + levelScore;
+  const scenario =
+    scenarioScore >= 2
+      ? "Бычий сценарий"
+      : scenarioScore <= -2
+        ? "Медвежий сценарий"
+        : "Нейтральный сценарий";
+
+  return {
+    point,
+    averageVolume20,
+    volumeRatio20,
+    support,
+    resistance,
+    trend,
+    impulse,
+    scenario,
+  };
 };
 
 const buildAnalysis = (
