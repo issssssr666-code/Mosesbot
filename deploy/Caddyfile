@@ -1,0 +1,4 @@
+# Replace this hostname before starting the stack.
+app.example.com {
+    reverse_proxy web:80
+}
