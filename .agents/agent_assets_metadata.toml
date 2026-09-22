@@ -14,3 +14,17 @@ mtime_ms = 1790059373970
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:f9de5f6c-9e3b-4d79-8c5a-5a9ae87d6a64/747d0d37-239f-47d3-8962-ed30e7ce0eec/78f8f1dc-171a-4465-9d5b-0adfd46fc199"
 storage_version_token = "1790059407544455"
 content_type = "image/jpeg"
+
+[[outputs]]
+id = "TFdhZm8nHN4_epQYzGtR3"
+uri = "file://screenshots/btc-market-console-technical-analysis-final.jpg"
+type = "image"
+title = "BTC Market Console — технический анализ"
+description = "Финальный скриншот с реальным BTCUSDT из Binance и блоком «Анализ Моисея»: EMA 21/50, RSI 14, MACD, объём, тренд, поддержка и сопротивление."
+logical_id = "26df0721-0c0c-44de-a41c-43619fa83e30"
+content_hash = "sha256:94cb719a66f637985140e41ad660d2d8087e60fc06841f1e9eae2d066ab2336d"
+size = 133143
+mtime_ms = 1790060133665
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:f9de5f6c-9e3b-4d79-8c5a-5a9ae87d6a64/26df0721-0c0c-44de-a41c-43619fa83e30/5a99e69e-44c4-427f-94c1-a14f7f2c44ef"
+storage_version_token = "1790060151434027"
+content_type = "image/jpeg"
