@@ -12,6 +12,10 @@ import {
   type BtcMarketAnalysis,
   type BtcTimeframe,
 } from "./btc-market-analysis";
+import {
+  getMarketIntelligence,
+  type MarketIntelligence,
+} from "./market-intelligence";
 
 const NEWS_LOOKBACK_HOURS = 72;
 const NEWS_LOOKBACK_MS = NEWS_LOOKBACK_HOURS * 60 * 60 * 1000;
@@ -90,6 +94,7 @@ export type MarketSentiment = {
 export type MarketContext = {
   technical: BtcMarketAnalysis;
   sentiment: MarketSentiment | null;
+  marketIntelligence: MarketIntelligence | null;
   alignment: string;
 };
 
@@ -474,10 +479,16 @@ export const getRecentSentimentHistory = async (limit = 5): Promise<SentimentHis
 export const getMosesContext = async (timeframe: BtcTimeframe = "4H"): Promise<MarketContext> => {
   const technical = await getBtcMarketAnalysis(timeframe);
   let sentiment: MarketSentiment | null = null;
+  let marketIntelligence: MarketIntelligence | null = null;
   try {
     sentiment = await getCurrentMarketSentiment();
   } catch {
     // Technical analysis remains useful when news providers are temporarily unavailable.
+  }
+  try {
+    marketIntelligence = await getMarketIntelligence(timeframe);
+  } catch {
+    // Technical analysis and news context remain useful when market data providers fail.
   }
   const technicalDirection =
     technical.scenario === "Бычий сценарий"
@@ -492,5 +503,5 @@ export const getMosesContext = async (timeframe: BtcTimeframe = "4H"): Promise<M
       : technicalDirection === "neutral" || sentiment.label === "neutral"
         ? "Технический сценарий подтверждается частично, но сильного одностороннего фундаментального фона нет."
         : "Новостной фон расходится с техническим сценарием и повышает риск резкого изменения картины.";
-  return { technical, sentiment, alignment };
+  return { technical, sentiment, marketIntelligence, alignment };
 };

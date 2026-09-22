@@ -6,6 +6,11 @@ import {
   type BtcTimeframe,
 } from "../lib/btc-market-analysis";
 import { getMosesContext } from "../lib/market-sentiment";
+import {
+  getMarketIntelligence,
+  getMarketIntelligenceHistory,
+  MarketIntelligenceError,
+} from "../lib/market-intelligence";
 
 const router: IRouter = Router();
 
@@ -63,6 +68,45 @@ router.get("/moses/market-context", async (req, res): Promise<void> => {
       error: error instanceof Error ? error.message : "Не удалось собрать рыночный фон.",
       timeframe,
     });
+  }
+});
+
+router.get("/moses/market-intelligence", async (req, res): Promise<void> => {
+  const rawTimeframe = req.query.timeframe;
+  const timeframe =
+    typeof rawTimeframe === "string" ? rawTimeframe.toUpperCase() : "4H";
+  if (!isBtcTimeframe(timeframe)) {
+    res.status(400).json({
+      error: "Неверный timeframe. Используйте 1H, 4H, 1D или 1W.",
+    });
+    return;
+  }
+  try {
+    res.json(await getMarketIntelligence(timeframe as BtcTimeframe));
+  } catch (error) {
+    const status = error instanceof MarketIntelligenceError && error.kind === "timeout" ? 504 : 502;
+    req.log.warn(
+      { timeframe, error: error instanceof Error ? error.message : error },
+      "Market intelligence failed",
+    );
+    res.status(status).json({
+      error: error instanceof Error ? error.message : "Не удалось собрать поведение рынка.",
+      timeframe,
+    });
+  }
+});
+
+router.get("/moses/market-intelligence/history", async (req, res): Promise<void> => {
+  const rawLimit = typeof req.query.limit === "string" ? Number(req.query.limit) : 20;
+  const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.trunc(rawLimit), 1), 100) : 20;
+  try {
+    res.json(await getMarketIntelligenceHistory(limit));
+  } catch (error) {
+    req.log.error(
+      { limit, error: error instanceof Error ? error.message : error },
+      "Market intelligence history failed",
+    );
+    res.status(500).json({ error: "Не удалось прочитать историю поведения рынка." });
   }
 });
 
