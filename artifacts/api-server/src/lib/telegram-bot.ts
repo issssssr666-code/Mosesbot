@@ -33,6 +33,10 @@ import {
   type MarketNewsItem,
   type MarketSentiment,
 } from "./market-sentiment";
+import {
+  getConfidenceCalibration,
+  type ConfidenceCalibration,
+} from "./confidence-calibration";
 
 type TelegramMessage = {
   chat: { id: number };
@@ -249,6 +253,7 @@ const helpText = [
   "/paper alerts — последние уведомления TEST TRADING",
   "/paper journal — последние закрытые сделки с анализом",
   "/paper lessons — накопленные выводы Моисея",
+  "/paper confidence — проверка калибровки вероятности 90%",
   "",
   "BACKTEST без изменения TEST TRADING:",
   "/backtest — тест за последние 180 дней на 4H",
@@ -391,6 +396,27 @@ const formatPaperLessons = (
     "",
     "Повторяющиеся ошибки:",
     formatLessonGroups(lessons.repeatingErrors),
+  ].join("\n");
+
+const formatCalibration = (calibrations: ConfidenceCalibration[]): string =>
+  [
+    "TEST TRADING · калибровка уверенности",
+    "",
+    "Текущие входы не изменены. Вероятность 90% не считается подтверждённой, пока нижняя граница 95% интервала на независимом проверочном отрезке не достигнет 90%.",
+    "",
+    ...calibrations.map((calibration) => {
+      const probability =
+        calibration.probability == null
+          ? "нет оценки"
+          : `${calibration.probability.toFixed(1)}%`;
+      const lowerBound =
+        calibration.lowerBound == null
+          ? "нет"
+          : `${calibration.lowerBound.toFixed(1)}%`;
+      return `${calibration.timeframe} ${calibration.direction} · ${calibration.eligible ? "ДОПУСК ПОДТВЕРЖДЁН" : "не готов"} · win rate проверки ${probability} · нижняя граница ${lowerBound} · сделок проверки ${calibration.validationTrades}\n  ${calibration.reason}`;
+    }),
+    "",
+    "До подтверждения калибровки режим более активных входов не включается.",
   ].join("\n");
 
 const formatBacktestReport = (report: BacktestReport): string =>
@@ -637,11 +663,22 @@ const handleMessage = async (token: string, message: TelegramMessage): Promise<v
   }
   if (command === "/paper") {
     const subcommand = argument?.toLowerCase() ?? "status";
-    if (!["status", "monitor", "trades", "stats", "alerts", "journal", "lessons"].includes(subcommand)) {
+    if (
+      ![
+        "status",
+        "monitor",
+        "trades",
+        "stats",
+        "alerts",
+        "journal",
+        "lessons",
+        "confidence",
+      ].includes(subcommand)
+    ) {
       await sendMessage(
         token,
         message.chat.id,
-        "Используйте /paper, /paper status, /paper monitor, /paper trades, /paper stats, /paper alerts, /paper journal или /paper lessons.",
+        "Используйте /paper, /paper status, /paper monitor, /paper trades, /paper stats, /paper alerts, /paper journal, /paper lessons или /paper confidence.",
       );
       return;
     }
@@ -654,6 +691,8 @@ const handleMessage = async (token: string, message: TelegramMessage): Promise<v
         response = formatPaperJournal(await getRecentPaperTradeJournals());
       } else if (subcommand === "lessons") {
         response = formatPaperLessons(await getPaperLessons());
+      } else if (subcommand === "confidence") {
+        response = formatCalibration(await getConfidenceCalibration());
       } else {
         const snapshot = await getPaperAccountSnapshot();
         response =
