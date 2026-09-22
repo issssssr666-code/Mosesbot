@@ -206,6 +206,131 @@ const recordScenarioObservation = async (analysis: BtcMarketAnalysis): Promise<v
     .onConflictDoNothing();
 };
 
+export const registerPaperAlertRecipient = async (chatId: number): Promise<void> => {
+  await ensurePaperAccount();
+  await db
+    .insert(paperAlertRecipientsTable)
+    .values({
+      accountId: ACCOUNT_ID,
+      chatId: String(chatId),
+      enabled: true,
+    })
+    .onConflictDoUpdate({
+      target: paperAlertRecipientsTable.accountId,
+      set: {
+        chatId: String(chatId),
+        enabled: true,
+        updatedAt: new Date(),
+      },
+    });
+};
+
+export const getRecentPaperAlertEvents = async (limit = 10): Promise<PaperAlertEventView[]> => {
+  const events = await db
+    .select()
+    .from(paperAlertEventsTable)
+    .where(eq(paperAlertEventsTable.accountId, ACCOUNT_ID))
+    .orderBy(desc(paperAlertEventsTable.id))
+    .limit(Math.min(Math.max(limit, 1), 50));
+  return events.map(alertEventView);
+};
+
+export type PaperAlertSender = (
+  chatId: number,
+  event: PaperAlertEventView,
+) => Promise<void>;
+
+let alertDeliveryPromise: Promise<void> | null = null;
+
+export const deliverPendingPaperAlerts = async (sender: PaperAlertSender): Promise<void> => {
+  if (alertDeliveryPromise) return alertDeliveryPromise;
+  alertDeliveryPromise = (async () => {
+    const [recipient] = await db
+      .select()
+      .from(paperAlertRecipientsTable)
+      .where(
+        and(
+          eq(paperAlertRecipientsTable.accountId, ACCOUNT_ID),
+          eq(paperAlertRecipientsTable.enabled, true),
+        ),
+      )
+      .limit(1);
+    if (!recipient) return;
+
+    const pendingEvents = await db
+      .select()
+      .from(paperAlertEventsTable)
+      .where(
+        and(
+          eq(paperAlertEventsTable.accountId, ACCOUNT_ID),
+          eq(paperAlertEventsTable.status, "pending"),
+          lte(paperAlertEventsTable.nextAttemptAt, new Date()),
+        ),
+      )
+      .orderBy(asc(paperAlertEventsTable.id))
+      .limit(20);
+
+    for (const event of pendingEvents) {
+      const attempts = event.attempts + 1;
+      await db
+        .update(paperAlertEventsTable)
+        .set({ attempts, lastError: null })
+        .where(eq(paperAlertEventsTable.id, event.id));
+      const view = alertEventView({ ...event, attempts });
+      try {
+        await sender(Number(recipient.chatId), view);
+        await db
+          .update(paperAlertEventsTable)
+          .set({
+            status: "sent",
+            sentAt: new Date(),
+            lastError: null,
+          })
+          .where(eq(paperAlertEventsTable.id, event.id));
+      } catch (error) {
+        const delay =
+          ALERT_RETRY_DELAYS_MS[Math.min(attempts - 1, ALERT_RETRY_DELAYS_MS.length - 1)];
+        const lastError = error instanceof Error ? error.message : "Неизвестная ошибка Telegram";
+        await db
+          .update(paperAlertEventsTable)
+          .set({
+            status: "pending",
+            nextAttemptAt: new Date(Date.now() + delay),
+            lastError,
+          })
+          .where(eq(paperAlertEventsTable.id, event.id));
+        logger.warn(
+          { eventId: event.id, attempts, nextAttemptInMs: delay, error: lastError },
+          "Paper trading alert delivery failed; retry scheduled",
+        );
+      }
+    }
+  })().finally(() => {
+    alertDeliveryPromise = null;
+  });
+  return alertDeliveryPromise;
+};
+
+const recordPaperAlertEvent = async (
+  trade: PaperTrade,
+  eventType: PaperAlertEventType,
+  payload: PaperAlertPayload,
+): Promise<void> => {
+  await db
+    .insert(paperAlertEventsTable)
+    .values({
+      accountId: ACCOUNT_ID,
+      tradeId: trade.id,
+      eventType,
+      symbol: trade.symbol,
+      timeframe: trade.timeframe,
+      direction: trade.direction,
+      scenario: trade.scenario,
+      payload,
+    })
+    .onConflictDoNothing();
+};
+
 const directionForScenario = (scenario: string): "LONG" | "SHORT" | null =>
   scenario === "Бычий сценарий" ? "LONG" : scenario === "Медвежий сценарий" ? "SHORT" : null;
 
@@ -341,12 +466,18 @@ const positionPnl = (
   return { gross, fees, slippageCost, net: gross - fees, exitPrice };
 };
 
+type PaperCloseContext = {
+  newScenario?: string;
+  newClosedCandleTime?: Date;
+};
+
 const applyClose = async (
   trade: PaperTrade,
   marketPrice: number,
   quantity: number,
   reason: string,
   isTakeProfit1 = false,
+  context: PaperCloseContext = {},
 ): Promise<PaperTrade> => {
   const pnl = positionPnl(trade, marketPrice, quantity);
   const remaining = Math.max(numberValue(trade.remainingQuantity) - quantity, 0);
@@ -387,6 +518,48 @@ const applyClose = async (
     .update(paperAccountsTable)
     .set({ balance: fixed(nextBalance), updatedAt: new Date() })
     .where(eq(paperAccountsTable.id, ACCOUNT_ID));
+
+  const eventType = reason as PaperAlertEventType;
+  const commonPayload: PaperAlertPayload = {
+    price: pnl.exitPrice,
+    pnl: numberValue(updated.netPnl),
+    balanceChange: pnl.net,
+    balance: nextBalance,
+  };
+  if (eventType === "TP1") {
+    await recordPaperAlertEvent(trade, eventType, {
+      ...commonPayload,
+      closedPercent: (quantity / Math.max(numberValue(trade.quantity), EPSILON)) * 100,
+      remainingQuantity: remaining,
+      takeProfit2: numberValue(updated.takeProfit2),
+      stopLoss: numberValue(updated.stopLoss),
+      tranchePnl: pnl.net,
+    });
+  } else if (eventType === "TP2") {
+    await recordPaperAlertEvent(updated, eventType, {
+      ...commonPayload,
+      closePrice: pnl.exitPrice,
+      finalPnl: numberValue(updated.netPnl),
+      result: numberValue(updated.netPnl) >= 0 ? "Прибыль" : "Убыток",
+    });
+  } else if (eventType === "SL") {
+    await recordPaperAlertEvent(updated, eventType, {
+      ...commonPayload,
+      entryPrice: numberValue(updated.entryPrice),
+      closePrice: pnl.exitPrice,
+      loss: numberValue(updated.netPnl),
+      closeReason: "Стоп-лосс",
+    });
+  } else if (eventType === "SCENARIO_CANCELLED") {
+    await recordPaperAlertEvent(updated, eventType, {
+      ...commonPayload,
+      previousScenario: trade.scenario,
+      newScenario: context.newScenario,
+      newClosedCandleTime: context.newClosedCandleTime?.toISOString() ?? null,
+      cancellationReason: `Сценарий изменился на «${context.newScenario ?? "неизвестный"}»`,
+      positionResult: numberValue(updated.netPnl),
+    });
+  }
   return updated;
 };
 
@@ -442,6 +615,11 @@ const evaluateOpenTrade = async (
       price,
       numberValue(current.remainingQuantity),
       "SCENARIO_CANCELLED",
+      false,
+      {
+        newScenario: analysis.scenario,
+        newClosedCandleTime: new Date(analysis.signalCandleTime),
+      },
     );
   }
 };
