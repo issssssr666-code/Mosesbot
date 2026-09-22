@@ -1,2 +1,3 @@
 - [Paper monitoring history](paper-monitoring.md) — neutral scenario metrics must be recorded prospectively; historical paper trades cannot reconstruct neutral signals.
 - [Paper alert outbox](paper-alert-outbox.md) — persist each trade event before Telegram delivery; retries must reuse its unique event identity.
+- [Confidence calibration](confidence-calibration.md) — a 90% entry gate requires out-of-sample evidence; heuristic indicator scores must not change entries.
