@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import {
   backtestRunsTable,
   db,
@@ -8,11 +8,9 @@ import {
   buildBtcStrategySnapshot,
   calculateTechnicalPoints,
   getBtcHistoricalCandles,
-  type BtcMarketDataError,
   type BtcStrategySnapshot,
   type BtcTimeframe,
   type BinanceKline,
-  type TechnicalPoint,
 } from "./btc-market-analysis";
 
 const INITIAL_BALANCE = 10_000;
@@ -83,6 +81,7 @@ type BacktestCandle = {
   openTime: number;
   closeTime: number;
   open: number;
+  close: number;
   high: number;
   low: number;
 };
@@ -99,6 +98,7 @@ const toCandle = (candle: BinanceKline): BacktestCandle => ({
   openTime: candle[0],
   closeTime: candle[6],
   open: Number(candle[1]),
+  close: Number(candle[4]),
   high: Number(candle[2]),
   low: Number(candle[3]),
 });
@@ -518,5 +518,3 @@ export const getRecentBacktestReports = async (limit = 5): Promise<BacktestRepor
     .limit(Math.min(Math.max(limit, 1), 20));
   return runs.map(backtestRunView);
 };
-
-export type { BtcMarketDataError };
