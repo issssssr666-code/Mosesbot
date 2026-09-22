@@ -1,0 +1,1 @@
+- [Paper monitoring history](paper-monitoring.md) — neutral scenario metrics must be recorded prospectively; historical paper trades cannot reconstruct neutral signals.
