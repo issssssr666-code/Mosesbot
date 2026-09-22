@@ -8,12 +8,16 @@ import {
 } from "./btc-market-analysis";
 import {
   deliverPendingPaperAlerts,
+  getPaperLessons,
   getRecentPaperAlertEvents,
+  getRecentPaperTradeJournals,
   getPaperAccountSnapshot,
   registerPaperAlertRecipient,
   refreshPaperTrading,
   type PaperAlertEventView,
   type PaperAccountSnapshot,
+  type PaperLessonGroup,
+  type PaperTradeJournalView,
   type PaperTradeView,
 } from "./paper-trading";
 
@@ -90,6 +94,26 @@ const formatPnl = (value: number) => `${value >= 0 ? "+" : ""}${formatMoney(valu
 
 const formatQuantity = (value: number) =>
   `${value.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 8 })} BTC`;
+
+const formatDuration = (seconds: number): string => {
+  const wholeMinutes = Math.floor(seconds / 60);
+  const days = Math.floor(wholeMinutes / (60 * 24));
+  const hours = Math.floor((wholeMinutes % (60 * 24)) / 60);
+  const minutes = wholeMinutes % 60;
+  if (days > 0) return `${days} д ${hours} ч ${minutes} мин`;
+  if (hours > 0) return `${hours} ч ${minutes} мин`;
+  return `${minutes} мин`;
+};
+
+const formatJournalClass = (value: PaperTradeJournalView["tradeClass"]): string =>
+  value === "successful_signal"
+    ? "успешный сигнал"
+    : value === "erroneous_signal"
+      ? "ошибочный сигнал"
+      : "слабый сигнал";
+
+const formatJournalFactors = (factors: string[]): string =>
+  factors.length > 0 ? factors.join(", ") : "нет";
 
 const alertNumber = (event: PaperAlertEventView, key: string): number =>
   Number(event.payload[key] ?? 0);
@@ -205,6 +229,8 @@ const helpText = [
   "/paper trades — последние тестовые сделки",
   "/paper stats — статистика тестовой торговли",
   "/paper alerts — последние уведомления TEST TRADING",
+  "/paper journal — последние закрытые сделки с анализом",
+  "/paper lessons — накопленные выводы Моисея",
 ].join("\n");
 
 const formatPaperPosition = (trade: PaperTradeView): string =>
@@ -282,6 +308,65 @@ const formatPaperStats = (snapshot: PaperAccountSnapshot): string =>
     `Максимальная просадка: ${formatMoney(snapshot.stats.maxDrawdown)}`,
     `Profit factor: ${snapshot.stats.profitFactor == null ? "не рассчитан" : snapshot.stats.profitFactor.toFixed(2)}`,
     `Expectancy: ${formatPnl(snapshot.stats.expectancy)}`,
+  ].join("\n");
+
+const formatPaperJournalEntry = (journal: PaperTradeJournalView): string =>
+  [
+    `#${journal.tradeId} · ${journal.symbol} ${journal.timeframe} ${journal.direction}`,
+    `${journal.entryTime} → ${journal.exitTime}`,
+    `Сценарий: ${journal.scenario}`,
+    `Результат: ${journal.result} · класс: ${formatJournalClass(journal.tradeClass)}`,
+    `P&L: ${formatPnl(journal.pnl)} · R: ${journal.rMultiple.toFixed(2)} · длительность: ${formatDuration(journal.durationSeconds)}`,
+    `EMA 21/50: ${formatPrice(journal.indicators.ema21)} / ${formatPrice(journal.indicators.ema50)} · RSI: ${journal.indicators.rsi14.toFixed(2)}`,
+    `MACD: ${journal.indicators.macd.toFixed(4)} · объём: ${journal.indicators.volumeRatio20.toFixed(2)}× от среднего`,
+    `Уровни: поддержка ${formatPrice(journal.indicators.support)} · сопротивление ${formatPrice(journal.indicators.resistance)}`,
+    `Подтвердило вход: ${formatJournalFactors(journal.confirmedFactors)}`,
+    `Ошибочным оказалось: ${formatJournalFactors(journal.errorFactors)}`,
+    `Причина открытия: ${journal.entryReason.slice(0, 220)}${journal.entryReason.length > 220 ? "…" : ""}`,
+  ].join("\n");
+
+const formatPaperJournal = (journals: PaperTradeJournalView[]): string =>
+  [
+    "TEST TRADING · Trader Journal",
+    journals.length > 0
+      ? journals.map(formatPaperJournalEntry).join("\n\n")
+      : "Журнал пока пуст. Анализ появится после следующего закрытия виртуальной сделки.",
+  ].join("\n\n");
+
+const formatLessonGroups = (groups: PaperLessonGroup[]): string =>
+  groups.length > 0
+    ? groups
+        .slice(0, 5)
+        .map(
+          (group) =>
+            `• ${group.label}: ${group.count} сделок, прибыльных ${group.profitableCount}, убыточных ${group.losingCount}, win rate ${group.winRate.toFixed(1)}%, средний P&L ${formatPnl(group.averagePnl)}, средний R ${group.averageRMultiple.toFixed(2)}`,
+        )
+        .join("\n")
+    : "Пока недостаточно закрытых сделок.";
+
+const formatPaperLessons = (
+  lessons: Awaited<ReturnType<typeof getPaperLessons>>,
+): string =>
+  [
+    "TEST TRADING · выводы Моисея",
+    lessons.journalCount > 0
+      ? `Проанализировано сделок: ${lessons.journalCount}\nСредняя длительность: ${formatDuration(lessons.averageDurationSeconds)}\nСредний R-множитель: ${lessons.averageRMultiple.toFixed(2)}`
+      : "Закрытых сделок с анализом пока нет.",
+    "",
+    "Лучшие таймфреймы:",
+    formatLessonGroups(lessons.bestTimeframes),
+    "",
+    "LONG против SHORT:",
+    formatLessonGroups(lessons.longVsShort),
+    "",
+    "Условия, чаще связанные с прибылью:",
+    formatLessonGroups(lessons.profitableEntryConditions),
+    "",
+    "Условия, чаще связанные с убытком:",
+    formatLessonGroups(lessons.losingEntryConditions),
+    "",
+    "Повторяющиеся ошибки:",
+    formatLessonGroups(lessons.repeatingErrors),
   ].join("\n");
 
 const formatAnalysis = (data: BtcMarketAnalysis): string => {
@@ -405,11 +490,11 @@ const handleMessage = async (token: string, message: TelegramMessage): Promise<v
   }
   if (command === "/paper") {
     const subcommand = argument?.toLowerCase() ?? "status";
-    if (!["status", "monitor", "trades", "stats", "alerts"].includes(subcommand)) {
+    if (!["status", "monitor", "trades", "stats", "alerts", "journal", "lessons"].includes(subcommand)) {
       await sendMessage(
         token,
         message.chat.id,
-        "Используйте /paper, /paper status, /paper monitor, /paper trades, /paper stats или /paper alerts.",
+        "Используйте /paper, /paper status, /paper monitor, /paper trades, /paper stats, /paper alerts, /paper journal или /paper lessons.",
       );
       return;
     }
@@ -418,6 +503,10 @@ const handleMessage = async (token: string, message: TelegramMessage): Promise<v
       let response: string;
       if (subcommand === "alerts") {
         response = formatPaperAlerts(await getRecentPaperAlertEvents());
+      } else if (subcommand === "journal") {
+        response = formatPaperJournal(await getRecentPaperTradeJournals());
+      } else if (subcommand === "lessons") {
+        response = formatPaperLessons(await getPaperLessons());
       } else {
         const snapshot = await getPaperAccountSnapshot();
         response =
