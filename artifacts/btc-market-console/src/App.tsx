@@ -864,7 +864,124 @@ function Home() {
               </aside>
             </section>
 
-            <section id="watchlist" className="rise-in rise-in-delay-2 mt-7">
+             <section id="market-background" className="rise-in rise-in-delay-2 mt-8">
+               <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+                 <div>
+                   <div className="data-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Контекст решения</div>
+                   <h2 className="mt-1 text-lg font-semibold tracking-[-0.04em]">Рыночный фон</h2>
+                 </div>
+                 <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                   <span className="data-mono">{timeframe} · последние {marketContext?.sentiment?.lookbackHours ?? 72} ч</span>
+                   <button data-testid="button-refresh-context" onClick={() => void loadMarketContext(timeframe)} className="rounded-lg border border-border bg-card p-2 transition-colors hover:border-primary/50 hover:text-primary">
+                     <RefreshCw size={13} className={contextLoading ? 'animate-spin' : ''} />
+                   </button>
+                 </div>
+               </div>
+               {contextError ? (
+                 <div className="panel flex items-start gap-3 rounded-2xl p-5 text-sm text-muted-foreground">
+                   <AlertTriangle size={17} className="mt-0.5 shrink-0 text-primary" />
+                   <div><div className="font-medium text-foreground">Рыночный фон временно недоступен</div><p className="mt-1 text-xs">{contextError}</p></div>
+                 </div>
+               ) : contextLoading && !marketContext ? (
+                 <div className="panel rounded-2xl p-8 text-center text-sm text-muted-foreground"><RefreshCw size={16} className="mr-2 inline animate-spin text-primary" />Собираем новости и риски рынка</div>
+               ) : (
+                 <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+                   <div className="panel rounded-2xl p-5">
+                     <div className="flex items-center justify-between">
+                       <div className="flex items-center gap-2 text-sm font-semibold"><Activity size={16} className="text-primary" /> Настроение</div>
+                       <span className="data-mono text-[10px] text-muted-foreground">{marketContext?.sentiment?.newsCount ?? 0} новостей</span>
+                     </div>
+                     {marketContext?.sentiment ? (
+                       <>
+                         <div className="mt-6 flex items-end justify-between gap-3">
+                           <div>
+                             <div className="data-mono text-4xl font-semibold tracking-[-0.08em]">{marketContext.sentiment.score > 0 ? '+' : ''}{marketContext.sentiment.score}</div>
+                             <div className={`mt-1 text-xs font-semibold ${marketContext.sentiment.label === 'positive' ? 'text-emerald-700 dark:text-emerald-300' : marketContext.sentiment.label === 'negative' ? 'text-red-700 dark:text-red-300' : 'text-muted-foreground'}`}>{sentimentLabel[marketContext.sentiment.label]}</div>
+                           </div>
+                           <div className="data-mono text-right text-[10px] text-muted-foreground">обновлено<br />{formatRelativeTime(marketContext.sentiment.calculatedAt)}</div>
+                         </div>
+                         <div className="mt-5 h-2 overflow-hidden rounded-full bg-muted"><div className={`h-full rounded-full ${marketContext.sentiment.label === 'positive' ? 'bg-emerald-500' : marketContext.sentiment.label === 'negative' ? 'bg-red-500' : 'bg-primary'}`} style={{ width: `${Math.min(100, Math.max(4, (marketContext.sentiment.score + 100) / 2))}%` }} /></div>
+                         <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                           <div className="rounded-lg bg-emerald-500/10 p-2"><div className="data-mono text-sm font-semibold text-emerald-700 dark:text-emerald-300">{marketContext.sentiment.positiveCount}</div><div className="mt-0.5 text-[9px] text-muted-foreground">позитив</div></div>
+                           <div className="rounded-lg bg-muted/70 p-2"><div className="data-mono text-sm font-semibold">{marketContext.sentiment.neutralCount}</div><div className="mt-0.5 text-[9px] text-muted-foreground">нейтрально</div></div>
+                           <div className="rounded-lg bg-red-500/10 p-2"><div className="data-mono text-sm font-semibold text-red-700 dark:text-red-300">{marketContext.sentiment.negativeCount}</div><div className="mt-0.5 text-[9px] text-muted-foreground">негатив</div></div>
+                         </div>
+                         <div className="mt-5 border-t border-border pt-4">
+                           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Связь с техникой</div>
+                           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{marketContext.alignment}</p>
+                         </div>
+                       </>
+                     ) : <div className="mt-5 rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">Свежих событий в окне наблюдения пока нет.</div>}
+                   </div>
+                   <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+                     <div className="panel rounded-2xl p-5">
+                       <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-semibold"><Newspaper size={16} className="text-primary" /> Последние события</div><span className="data-mono text-[10px] text-muted-foreground">RSS · дедупликация</span></div>
+                       <div className="mt-4 space-y-2">
+                         {marketContext?.sentiment?.topNews?.length ? marketContext.sentiment.topNews.slice(0, 4).map((news) => (
+                           <a key={news.id} href={news.canonicalUrl} target="_blank" rel="noreferrer" className="group block rounded-xl border border-transparent bg-muted/45 p-3 transition-colors hover:border-primary/35 hover:bg-muted/75">
+                             <div className="flex items-start justify-between gap-3"><div className="text-xs font-medium leading-snug group-hover:text-primary">{news.title}</div><span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-semibold ${news.impactDirection === 'positive' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : news.impactDirection === 'negative' ? 'bg-red-500/10 text-red-700 dark:text-red-300' : 'bg-muted text-muted-foreground'}`}>{news.impactDirection === 'positive' ? 'поддержка' : news.impactDirection === 'negative' ? 'риск' : 'фон'}</span></div>
+                             <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground"><span>{news.source}</span><span>·</span><span>{formatRelativeTime(news.publishedAt)}</span><span className="ml-auto">{categoryLabels[news.category] ?? news.category}</span></div>
+                           </a>
+                         )) : <div className="rounded-lg bg-muted/60 p-4 text-xs text-muted-foreground">Новости пока не поступили или источники временно недоступны.</div>}
+                       </div>
+                     </div>
+                     <div className="panel rounded-2xl p-5">
+                       <div className="flex items-center gap-2 text-sm font-semibold"><AlertTriangle size={16} className="text-primary" /> Риски</div>
+                       <div className="mt-4 space-y-3">
+                         {marketContext?.sentiment?.risks?.length ? marketContext.sentiment.risks.slice(0, 5).map((risk) => <div key={risk} className="flex gap-2 text-xs leading-relaxed text-muted-foreground"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />{risk}</div>) : <div className="text-xs leading-relaxed text-muted-foreground">Явных рисков по текущему окну не выделено.</div>}
+                       </div>
+                       <div className="mt-5 border-t border-border pt-4 text-[10px] text-muted-foreground">
+                         Источники: {marketContext?.sentiment?.sourceStatus.filter((source) => source.ok).length ?? 0}/{marketContext?.sentiment?.sourceStatus.length ?? 0} доступны
+                       </div>
+                     </div>
+                   </div>
+                 </div>
+               )}
+             </section>
+
+             <section id="forum" className="rise-in rise-in-delay-3 mt-8">
+               <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+                 <div>
+                   <div className="data-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Открытое обсуждение</div>
+                   <h2 className="mt-1 flex items-center gap-2 text-lg font-semibold tracking-[-0.04em]"><MessageCircle size={19} className="text-primary" /> Форум сигналов и новостей</h2>
+                 </div>
+                 <div className="flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card p-1">
+                   {['all', 'technical', 'news', 'risk', 'paper'].map((category) => <button key={category} data-testid={`button-forum-category-${category}`} onClick={() => setForumCategory(category)} className={`rounded-md px-2.5 py-1.5 text-[10px] font-medium transition-colors ${forumCategory === category ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>{category === 'all' ? 'Все' : categoryLabels[category]}</button>)}
+                 </div>
+               </div>
+               <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+                 <div className="space-y-4">
+                   <div className="panel rounded-2xl p-5">
+                     <div className="flex items-center justify-between"><div className="flex items-center gap-2 text-sm font-semibold"><Send size={15} className="text-primary" /> Новая тема</div><span className="text-[10px] text-muted-foreground">гостевой режим</span></div>
+                     <div className="mt-4 grid gap-3">
+                       <input data-testid="input-forum-author" value={authorName} onChange={(event) => setAuthorName(event.target.value)} maxLength={40} placeholder="Отображаемое имя" className="h-10 rounded-lg border border-input bg-background px-3 text-xs outline-none transition-colors focus:border-primary/60" />
+                       <input data-testid="input-forum-title" value={threadForm.title} onChange={(event) => setThreadForm((current) => ({ ...current, title: event.target.value }))} maxLength={120} placeholder="Заголовок: что происходит с BTC?" className="h-10 rounded-lg border border-input bg-background px-3 text-xs outline-none transition-colors focus:border-primary/60" />
+                       <div className="grid gap-3 sm:grid-cols-[140px_1fr]">
+                         <select data-testid="select-forum-category" value={threadForm.category} onChange={(event) => setThreadForm((current) => ({ ...current, category: event.target.value }))} className="h-10 rounded-lg border border-input bg-background px-3 text-xs outline-none focus:border-primary/60">{Object.entries(categoryLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+                         <button data-testid="button-create-thread" disabled={forumBusy} onClick={() => void createThread()} className="h-10 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">{forumBusy ? 'Публикуем…' : 'Опубликовать тему'}</button>
+                       </div>
+                       <textarea data-testid="textarea-forum-body" value={threadForm.body} onChange={(event) => setThreadForm((current) => ({ ...current, body: event.target.value }))} maxLength={2000} rows={3} placeholder="Опишите наблюдение, новость или сценарий…" className="resize-y rounded-lg border border-input bg-background px-3 py-2.5 text-xs leading-relaxed outline-none transition-colors focus:border-primary/60" />
+                     </div>
+                   </div>
+                   <div className="panel overflow-hidden rounded-2xl">
+                     <div className="flex items-center justify-between border-b border-border px-5 py-4"><div className="text-sm font-semibold">Темы сообщества</div><span className="data-mono text-[10px] text-muted-foreground">{forumThreads.length} в списке</span></div>
+                     {forumLoading ? <div className="p-7 text-center text-xs text-muted-foreground"><RefreshCw size={14} className="mr-2 inline animate-spin text-primary" />Загружаем обсуждения</div> : forumThreads.length === 0 ? <div className="p-7 text-center text-xs text-muted-foreground">В этой категории пока нет тем.</div> : <div className="max-h-[420px] overflow-y-auto">{forumThreads.map((thread) => <button key={thread.id} data-testid={`button-forum-thread-${thread.id}`} onClick={() => void openThread(thread.id)} className={`block w-full border-b border-border px-5 py-4 text-left transition-colors last:border-0 hover:bg-muted/45 ${selectedThreadId === thread.id ? 'bg-primary/5' : ''}`}><div className="flex items-start justify-between gap-3"><span className="text-xs font-semibold leading-snug">{thread.title}</span><span className="shrink-0 rounded-full bg-muted px-2 py-1 text-[9px] text-muted-foreground">{categoryLabels[thread.category] ?? thread.category}</span></div><div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground"><span>{thread.authorName}</span><span>·</span><span>{formatRelativeTime(thread.lastActivityAt)}</span><span className="ml-auto flex items-center gap-1"><MessageCircle size={11} />{thread.replyCount}</span></div></button>)}</div>}
+                   </div>
+                 </div>
+                 <div className="panel min-h-[360px] rounded-2xl p-5">
+                   {selectedThread ? (
+                     <>
+                       <div className="border-b border-border pb-4"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-primary/10 px-2 py-1 text-[9px] font-semibold text-primary">{categoryLabels[selectedThread.category] ?? selectedThread.category}</span><span className="text-[10px] text-muted-foreground">{selectedThread.authorName} · {formatRelativeTime(selectedThread.createdAt)}</span></div><h3 className="mt-3 text-lg font-semibold tracking-[-0.04em]">{selectedThread.title}</h3><p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">{selectedThread.body}</p></div>
+                       <div className="max-h-[360px] space-y-3 overflow-y-auto py-4">{selectedThread.posts.length ? selectedThread.posts.map((post) => <div key={post.id} className="rounded-xl bg-muted/55 p-3"><div className="flex items-center justify-between gap-3 text-[10px]"><span className="font-semibold">{post.authorName}</span><span className="text-muted-foreground">{formatRelativeTime(post.createdAt)}</span></div><p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">{post.body}</p></div>) : <div className="py-5 text-center text-xs text-muted-foreground">Ответов пока нет. Поделитесь первым наблюдением.</div>}</div>
+                       <div className="flex gap-2 border-t border-border pt-4"><textarea data-testid="textarea-forum-reply" value={replyBody} onChange={(event) => setReplyBody(event.target.value)} maxLength={2000} rows={2} placeholder="Ваш ответ…" className="min-w-0 flex-1 resize-y rounded-lg border border-input bg-background px-3 py-2.5 text-xs leading-relaxed outline-none focus:border-primary/60" /><button data-testid="button-create-reply" disabled={forumBusy || !replyBody.trim()} onClick={() => void createReply()} className="self-end rounded-lg bg-secondary px-3 py-2.5 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/85 disabled:cursor-not-allowed disabled:opacity-50"><Send size={14} /></button></div>
+                     </>
+                   ) : <div className="flex h-full min-h-[320px] flex-col items-center justify-center text-center"><MessageCircle size={28} className="text-primary/60" /><div className="mt-3 text-sm font-medium">Выберите тему</div><p className="mt-1 max-w-xs text-xs leading-relaxed text-muted-foreground">Здесь появятся исходное сообщение и ответы сообщества.</p></div>}
+                 </div>
+               </div>
+               {forumError && <div className="mt-3 flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-700 dark:text-red-300"><AlertTriangle size={14} />{forumError}</div>}
+             </section>
+
+             <section id="watchlist" className="rise-in rise-in-delay-2 mt-7">
               <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
                  <div><div className="data-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Контекст</div><h2 className="mt-1 text-lg font-semibold tracking-[-0.04em]">Список наблюдения</h2></div>
                  <label className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground focus-within:border-primary/60"><Search size={14} /><input data-testid="input-search-watchlist" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Фильтр активов" className="w-28 bg-transparent outline-none placeholder:text-muted-foreground/60 sm:w-36" /></label>
