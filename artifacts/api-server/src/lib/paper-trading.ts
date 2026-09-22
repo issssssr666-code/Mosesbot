@@ -5,9 +5,11 @@ import {
   paperAlertEventsTable,
   paperAlertRecipientsTable,
   paperScenarioObservationsTable,
+  paperTradeJournalsTable,
   paperTradesTable,
   type PaperAccount,
   type PaperAlertEvent,
+  type PaperTradeJournal,
   type PaperTrade,
 } from "@workspace/db";
 import {
@@ -92,10 +94,86 @@ export type PaperAccountSnapshot = {
   };
 };
 
+export type PaperTradeJournalClass =
+  | "successful_signal"
+  | "weak_signal"
+  | "erroneous_signal";
+
+export type PaperTradeJournalView = {
+  id: number;
+  tradeId: number;
+  entryTime: string;
+  exitTime: string;
+  symbol: string;
+  timeframe: string;
+  direction: string;
+  scenario: string;
+  entryReason: string;
+  indicators: {
+    ema21: number;
+    ema50: number;
+    rsi14: number;
+    macd: number;
+    macdSignal: number;
+    macdHistogram: number;
+    candleVolume: number;
+    averageVolume20: number;
+    volumeRatio20: number;
+    support: number;
+    resistance: number;
+  };
+  result: string;
+  pnl: number;
+  durationSeconds: number;
+  rMultiple: number;
+  confirmedFactors: string[];
+  errorFactors: string[];
+  tradeClass: PaperTradeJournalClass;
+};
+
+export type PaperLessonGroup = {
+  label: string;
+  count: number;
+  profitableCount: number;
+  losingCount: number;
+  winRate: number;
+  averagePnl: number;
+  averageRMultiple: number;
+};
+
+export type PaperLessons = {
+  journalCount: number;
+  averageDurationSeconds: number;
+  averageRMultiple: number;
+  bestTimeframes: PaperLessonGroup[];
+  longVsShort: PaperLessonGroup[];
+  profitableEntryConditions: PaperLessonGroup[];
+  losingEntryConditions: PaperLessonGroup[];
+  repeatingErrors: PaperLessonGroup[];
+};
+
 const numberValue = (value: string | number | null | undefined): number =>
   value == null ? 0 : Number(value);
 
 const fixed = (value: number): string => value.toFixed(8);
+
+const JOURNAL_ERROR_FACTORS = {
+  weakImpulse: "Слабый импульс",
+  falseBreakout: "Ложный пробой",
+  indicatorDivergence: "Расхождение индикаторов",
+  poorRiskReward: "Плохое соотношение риск/прибыль",
+  insufficientVolume: "Недостаточный объём",
+} as const;
+
+const resultLabel = (pnl: number): string =>
+  pnl > EPSILON ? "Прибыль" : pnl < -EPSILON ? "Убыток" : "Безубыток";
+
+const journalClassLabel = (tradeClass: PaperTradeJournalClass): string =>
+  tradeClass === "successful_signal"
+    ? "Успешный сигнал"
+    : tradeClass === "erroneous_signal"
+      ? "Ошибочный сигнал"
+      : "Слабый сигнал";
 
 const alertEventView = (event: PaperAlertEvent): PaperAlertEventView => ({
   id: event.id,
@@ -110,6 +188,38 @@ const alertEventView = (event: PaperAlertEvent): PaperAlertEventView => ({
   attempts: event.attempts,
   createdAt: event.createdAt.toISOString(),
   sentAt: event.sentAt?.toISOString() ?? null,
+});
+
+const journalView = (journal: PaperTradeJournal): PaperTradeJournalView => ({
+  id: journal.id,
+  tradeId: journal.tradeId,
+  entryTime: journal.entryTime.toISOString(),
+  exitTime: journal.exitTime.toISOString(),
+  symbol: journal.symbol,
+  timeframe: journal.timeframe,
+  direction: journal.direction,
+  scenario: journal.scenario,
+  entryReason: journal.entryReason,
+  indicators: {
+    ema21: numberValue(journal.ema21),
+    ema50: numberValue(journal.ema50),
+    rsi14: numberValue(journal.rsi14),
+    macd: numberValue(journal.macd),
+    macdSignal: numberValue(journal.macdSignal),
+    macdHistogram: numberValue(journal.macdHistogram),
+    candleVolume: numberValue(journal.candleVolume),
+    averageVolume20: numberValue(journal.averageVolume20),
+    volumeRatio20: numberValue(journal.volumeRatio20),
+    support: numberValue(journal.support),
+    resistance: numberValue(journal.resistance),
+  },
+  result: journal.result,
+  pnl: numberValue(journal.pnl),
+  durationSeconds: journal.durationSeconds,
+  rMultiple: numberValue(journal.rMultiple),
+  confirmedFactors: journal.confirmedFactors,
+  errorFactors: journal.errorFactors,
+  tradeClass: journal.tradeClass as PaperTradeJournalClass,
 });
 
 const tradeView = (
@@ -233,6 +343,114 @@ export const getRecentPaperAlertEvents = async (limit = 10): Promise<PaperAlertE
     .orderBy(desc(paperAlertEventsTable.id))
     .limit(Math.min(Math.max(limit, 1), 50));
   return events.map(alertEventView);
+};
+
+export const getRecentPaperTradeJournals = async (
+  limit = 5,
+): Promise<PaperTradeJournalView[]> => {
+  const journals = await db
+    .select()
+    .from(paperTradeJournalsTable)
+    .where(eq(paperTradeJournalsTable.accountId, ACCOUNT_ID))
+    .orderBy(desc(paperTradeJournalsTable.id))
+    .limit(Math.min(Math.max(limit, 1), 20));
+  return journals.map(journalView);
+};
+
+const average = (values: number[]): number =>
+  values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+
+const journalGroup = (label: string, journals: PaperTradeJournalView[]): PaperLessonGroup => {
+  const profitable = journals.filter((journal) => journal.pnl > EPSILON);
+  const losing = journals.filter((journal) => journal.pnl < -EPSILON);
+  return {
+    label,
+    count: journals.length,
+    profitableCount: profitable.length,
+    losingCount: losing.length,
+    winRate: journals.length > 0 ? (profitable.length / journals.length) * 100 : 0,
+    averagePnl: average(journals.map((journal) => journal.pnl)),
+    averageRMultiple: average(journals.map((journal) => journal.rMultiple)),
+  };
+};
+
+const groupJournals = (
+  journals: PaperTradeJournalView[],
+  keyFor: (journal: PaperTradeJournalView) => string,
+): PaperLessonGroup[] => {
+  const groups = new Map<string, PaperTradeJournalView[]>();
+  for (const journal of journals) {
+    const key = keyFor(journal);
+    const group = groups.get(key) ?? [];
+    group.push(journal);
+    groups.set(key, group);
+  }
+  return [...groups.entries()]
+    .map(([label, group]) => journalGroup(label, group))
+    .sort(
+      (left, right) =>
+        right.averagePnl - left.averagePnl ||
+        right.winRate - left.winRate ||
+        right.count - left.count,
+    );
+};
+
+export const getPaperLessons = async (): Promise<PaperLessons> => {
+  const rows = await db
+    .select()
+    .from(paperTradeJournalsTable)
+    .where(eq(paperTradeJournalsTable.accountId, ACCOUNT_ID))
+    .orderBy(desc(paperTradeJournalsTable.id));
+  const journals = rows.map(journalView);
+  const profitable = journals.filter((journal) => journal.pnl > EPSILON);
+  const losing = journals.filter((journal) => journal.pnl < -EPSILON);
+  const conditionGroups = (source: PaperTradeJournalView[]) =>
+    groupJournals(
+      source.flatMap((journal) =>
+        journal.confirmedFactors.map(() => journal),
+      ),
+      (journal) => journal.confirmedFactors.find((factor) => factor) ?? "—",
+    );
+  const profitableEntryConditions = new Map<string, PaperTradeJournalView[]>();
+  const losingEntryConditions = new Map<string, PaperTradeJournalView[]>();
+  const repeatingErrors = new Map<string, PaperTradeJournalView[]>();
+  const addToGroup = (
+    groups: Map<string, PaperTradeJournalView[]>,
+    label: string,
+    journal: PaperTradeJournalView,
+  ) => {
+    const group = groups.get(label) ?? [];
+    group.push(journal);
+    groups.set(label, group);
+  };
+  for (const journal of journals) {
+    for (const factor of journal.confirmedFactors) {
+      if (journal.pnl > EPSILON) addToGroup(profitableEntryConditions, factor, journal);
+      if (journal.pnl < -EPSILON) addToGroup(losingEntryConditions, factor, journal);
+    }
+    if (journal.pnl < -EPSILON) {
+      for (const factor of journal.errorFactors) addToGroup(repeatingErrors, factor, journal);
+    }
+  }
+  const mapGroups = (groups: Map<string, PaperTradeJournalView[]>) =>
+    [...groups.entries()]
+      .map(([label, group]) => journalGroup(label, group))
+      .sort(
+        (left, right) =>
+          right.count - left.count ||
+          right.averagePnl - left.averagePnl,
+      );
+
+  return {
+    journalCount: journals.length,
+    averageDurationSeconds: average(journals.map((journal) => journal.durationSeconds)),
+    averageRMultiple: average(journals.map((journal) => journal.rMultiple)),
+    bestTimeframes: groupJournals(journals, (journal) => journal.timeframe),
+    longVsShort: groupJournals(journals, (journal) => journal.direction),
+    profitableEntryConditions: mapGroups(profitableEntryConditions),
+    losingEntryConditions: mapGroups(losingEntryConditions),
+    repeatingErrors: mapGroups(repeatingErrors),
+  };
 };
 
 export type PaperAlertSender = (
