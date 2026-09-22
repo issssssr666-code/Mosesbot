@@ -123,9 +123,13 @@ const formatAnalysis = (data: BtcMarketAnalysis): string => {
   const emaRsiRelationship =
     priceAboveEma21 && priceAboveEma50 && rsi14 >= 70
       ? "Цена выше обеих EMA, однако RSI близок к зоне перекупленности — это важное ограничение вывода."
+      : priceAboveEma21 && priceAboveEma50 && rsi14 >= 50
+        ? "Цена выше обеих EMA, и RSI выше нейтральной середины — эти показатели согласованы."
       : !priceAboveEma21 && !priceAboveEma50 && rsi14 <= 30
         ? "Цена ниже обеих EMA, при этом RSI близок к зоне перепроданности — показатели направлены одинаково, но RSI указывает на крайнее состояние."
-        : `Цена относительно EMA и RSI не дают полностью одинаковый сигнал: ${pricePosition.toLowerCase()} RSI — ${rsiDescription.toLowerCase()}.`;
+        : !priceAboveEma21 && !priceAboveEma50 && rsi14 < 50
+          ? "Цена ниже обеих EMA, и RSI ниже нейтральной середины — эти показатели согласованы."
+          : `Цена относительно EMA и RSI расходятся: ${pricePosition.toLowerCase()} RSI — ${rsiDescription.toLowerCase()}.`;
   const volumeDescription =
     volumeRatio20 >= 1.2
       ? "Объём выше среднего и подтверждает повышенную активность текущей свечи."
