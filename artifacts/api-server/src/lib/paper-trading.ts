@@ -360,7 +360,9 @@ const evaluateOpenTrade = async (
 
 const updateDrawdown = async (account: PaperAccount, analyses: BtcMarketAnalysis[]): Promise<void> => {
   const openTrades = await getOpenTrades();
-  const prices = new Map(analyses.map((analysis) => [analysis.timeframe, analysis.market.price]));
+  const prices = new Map<string, number>(
+    analyses.map((analysis) => [analysis.timeframe, analysis.market.price]),
+  );
   const unrealizedPnl = openTrades.reduce((sum, trade) => {
     const price = prices.get(trade.timeframe);
     if (price == null) return sum;
