@@ -89,7 +89,7 @@ export type MarketSentiment = {
 
 export type MarketContext = {
   technical: BtcMarketAnalysis;
-  sentiment: MarketSentiment;
+  sentiment: MarketSentiment | null;
   alignment: string;
 };
 
@@ -472,18 +472,22 @@ export const getRecentSentimentHistory = async (limit = 5): Promise<SentimentHis
     .limit(Math.min(Math.max(limit, 1), 20));
 
 export const getMosesContext = async (timeframe: BtcTimeframe = "4H"): Promise<MarketContext> => {
-  const [technical, sentiment] = await Promise.all([
-    getBtcMarketAnalysis(timeframe),
-    getCurrentMarketSentiment(),
-  ]);
+  const technical = await getBtcMarketAnalysis(timeframe);
+  let sentiment: MarketSentiment | null = null;
+  try {
+    sentiment = await getCurrentMarketSentiment();
+  } catch {
+    // Technical analysis remains useful when news providers are temporarily unavailable.
+  }
   const technicalDirection =
     technical.scenario === "Бычий сценарий"
       ? "positive"
       : technical.scenario === "Медвежий сценарий"
         ? "negative"
         : "neutral";
-  const alignment =
-    technicalDirection === sentiment.label && technicalDirection !== "neutral"
+  const alignment = !sentiment
+    ? "Новостной фон недоступен, поэтому согласованность с техникой не оценена."
+    : technicalDirection === sentiment.label && technicalDirection !== "neutral"
       ? "Новостной фон совпадает с техническим сценарием и подтверждает его частично."
       : technicalDirection === "neutral" || sentiment.label === "neutral"
         ? "Технический сценарий подтверждается частично, но сильного одностороннего фундаментального фона нет."
