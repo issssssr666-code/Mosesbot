@@ -150,6 +150,41 @@ export const paperTradeJournalsTable = pgTable(
   }),
 );
 
+export const backtestRunsTable = pgTable(
+  "backtest_runs",
+  {
+    id: serial("id").primaryKey(),
+    symbol: text("symbol").notNull(),
+    timeframe: text("timeframe").notNull(),
+    periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
+    candleCount: integer("candle_count").notNull(),
+    signalCount: integer("signal_count").notNull(),
+    tradeCount: integer("trade_count").notNull(),
+    longTradeCount: integer("long_trade_count").notNull(),
+    shortTradeCount: integer("short_trade_count").notNull(),
+    profitableTradeCount: integer("profitable_trade_count").notNull(),
+    losingTradeCount: integer("losing_trade_count").notNull(),
+    winRate: numeric("win_rate", { precision: 12, scale: 8 }).notNull(),
+    totalPnl: numeric("total_pnl", { precision: 20, scale: 8 }).notNull(),
+    maxDrawdown: numeric("max_drawdown", { precision: 20, scale: 8 }).notNull(),
+    profitFactor: numeric("profit_factor", { precision: 20, scale: 8 }),
+    expectancy: numeric("expectancy", { precision: 20, scale: 8 }).notNull(),
+    averageDurationSeconds: integer("average_duration_seconds").notNull(),
+    averageRMultiple: numeric("average_r_multiple", { precision: 20, scale: 8 }).notNull(),
+    initialBalance: numeric("initial_balance", { precision: 20, scale: 8 }).notNull(),
+    finalBalance: numeric("final_balance", { precision: 20, scale: 8 }).notNull(),
+    report: jsonb("report").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    timeframeCreatedAt: index("backtest_runs_timeframe_created_at").on(
+      table.timeframe,
+      table.createdAt,
+    ),
+  }),
+);
+
 export const paperScenarioObservationsTable = pgTable(
   "paper_scenario_observations",
   {
@@ -194,6 +229,10 @@ export const insertPaperTradeJournalSchema = createInsertSchema(paperTradeJourna
   id: true,
   createdAt: true,
 });
+export const insertBacktestRunSchema = createInsertSchema(backtestRunsTable).omit({
+  id: true,
+  createdAt: true,
+});
 
 export type InsertPaperAccount = z.infer<typeof insertPaperAccountSchema>;
 export type InsertPaperTrade = z.infer<typeof insertPaperTradeSchema>;
@@ -203,9 +242,11 @@ export type InsertPaperScenarioObservation = z.infer<
 export type InsertPaperAlertRecipient = z.infer<typeof insertPaperAlertRecipientSchema>;
 export type InsertPaperAlertEvent = z.infer<typeof insertPaperAlertEventSchema>;
 export type InsertPaperTradeJournal = z.infer<typeof insertPaperTradeJournalSchema>;
+export type InsertBacktestRun = z.infer<typeof insertBacktestRunSchema>;
 export type PaperAccount = typeof paperAccountsTable.$inferSelect;
 export type PaperTrade = typeof paperTradesTable.$inferSelect;
 export type PaperScenarioObservation = typeof paperScenarioObservationsTable.$inferSelect;
 export type PaperAlertRecipient = typeof paperAlertRecipientsTable.$inferSelect;
 export type PaperAlertEvent = typeof paperAlertEventsTable.$inferSelect;
 export type PaperTradeJournal = typeof paperTradeJournalsTable.$inferSelect;
+export type BacktestRun = typeof backtestRunsTable.$inferSelect;
