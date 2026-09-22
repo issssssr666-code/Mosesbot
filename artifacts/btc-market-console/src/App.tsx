@@ -104,10 +104,10 @@ type TechnicalAnalysis = {
 
 const BINANCE_API = 'https://api.binance.com/api/v3';
 const timeframeRequests: Record<Timeframe, { interval: string; historyLimit: number; displayLimit: number }> = {
-  '1H': { interval: '5m', historyLimit: 200, displayLimit: 12 },
-  '4H': { interval: '15m', historyLimit: 200, displayLimit: 16 },
-  '1D': { interval: '1h', historyLimit: 200, displayLimit: 24 },
-  '1W': { interval: '4h', historyLimit: 200, displayLimit: 42 },
+  '1H': { interval: '1h', historyLimit: 200, displayLimit: 24 },
+  '4H': { interval: '4h', historyLimit: 200, displayLimit: 24 },
+  '1D': { interval: '1d', historyLimit: 200, displayLimit: 30 },
+  '1W': { interval: '1w', historyLimit: 200, displayLimit: 26 },
 };
 
 const watchlist: Asset[] = [

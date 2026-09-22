@@ -42,3 +42,17 @@ mtime_ms = 1790060255861
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:f9de5f6c-9e3b-4d79-8c5a-5a9ae87d6a64/24ce84a0-d98c-4bc5-a5c1-ba726c2ba4d3/e258dd35-92e0-451c-8a50-84e8877221bf"
 storage_version_token = "1790060262446491"
 content_type = "image/jpeg"
+
+[[outputs]]
+id = "22DIvTicikkTYGrT3oOUv"
+uri = "file://screenshots/btc-market-console-correct-timeframes.jpg"
+type = "image"
+title = "BTC Market Console — правильные таймфреймы"
+description = "Скриншот обновлённой консоли на 4H: свечи 4h Binance, пересчитанные EMA 21/50, RSI 14, MACD, объём и динамические уровни."
+logical_id = "93ab6196-f19b-4029-a517-60477abe2ffd"
+content_hash = "sha256:c3a7a65e410eef55662e581481bdbfb295a2de8bbd623f1420a1989a90ade33c"
+size = 132129
+mtime_ms = 1790060413157
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:f9de5f6c-9e3b-4d79-8c5a-5a9ae87d6a64/93ab6196-f19b-4029-a517-60477abe2ffd/6ac2526c-cb77-4ad2-bb36-9ae2c69ee267"
+storage_version_token = "1790060421087843"
+content_type = "image/jpeg"
