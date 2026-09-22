@@ -654,6 +654,12 @@ function Home() {
                 <button data-testid="button-nav-validation" onClick={() => document.getElementById('validation')?.scrollIntoView({ behavior: 'smooth' })} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-sidebar-foreground/65 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground">
                   <ShieldCheck size={17} /> Проверки <span className="data-mono ml-auto text-[10px] text-sidebar-foreground/35">05</span>
                 </button>
+                <button data-testid="button-nav-context" onClick={() => document.getElementById('market-background')?.scrollIntoView({ behavior: 'smooth' })} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-sidebar-foreground/65 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground">
+                  <Newspaper size={17} /> Рыночный фон
+                </button>
+                <button data-testid="button-nav-forum" onClick={() => document.getElementById('forum')?.scrollIntoView({ behavior: 'smooth' })} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-sidebar-foreground/65 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground">
+                  <MessageCircle size={17} /> Форум <span className="data-mono ml-auto text-[10px] text-sidebar-foreground/35">{forumThreads.length.toString().padStart(2, '0')}</span>
+                </button>
               </nav>
             </div>
 
