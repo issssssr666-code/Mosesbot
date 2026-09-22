@@ -81,16 +81,16 @@ const chartSets: Record<Timeframe, { label: string; value: number }[]> = {
     { label: '02:00', value: 67842 },
   ],
   '1D': [
-    { label: '17 May', value: 64280 }, { label: '18 May', value: 65140 }, { label: '19 May', value: 64830 },
-    { label: '20 May', value: 66020 }, { label: '21 May', value: 65640 }, { label: '22 May', value: 66980 },
-    { label: '23 May', value: 66410 }, { label: '24 May', value: 67580 }, { label: '25 May', value: 67120 },
-    { label: '26 May', value: 67842 },
+    { label: '17 мая', value: 64280 }, { label: '18 мая', value: 65140 }, { label: '19 мая', value: 64830 },
+    { label: '20 мая', value: 66020 }, { label: '21 мая', value: 65640 }, { label: '22 мая', value: 66980 },
+    { label: '23 мая', value: 66410 }, { label: '24 мая', value: 67580 }, { label: '25 мая', value: 67120 },
+    { label: '26 мая', value: 67842 },
   ],
   '1W': [
-    { label: 'Mar 18', value: 58420 }, { label: 'Mar 25', value: 61480 }, { label: 'Apr 01', value: 59840 },
-    { label: 'Apr 08', value: 67280 }, { label: 'Apr 15', value: 64390 }, { label: 'Apr 22', value: 65810 },
-    { label: 'Apr 29', value: 62940 }, { label: 'May 06', value: 68420 }, { label: 'May 13', value: 66110 },
-    { label: 'May 20', value: 67842 },
+    { label: '18 мар', value: 58420 }, { label: '25 мар', value: 61480 }, { label: '01 апр', value: 59840 },
+    { label: '08 апр', value: 67280 }, { label: '15 апр', value: 64390 }, { label: '22 апр', value: 65810 },
+    { label: '29 апр', value: 62940 }, { label: '06 мая', value: 68420 }, { label: '13 мая', value: 66110 },
+    { label: '20 мая', value: 67842 },
   ],
 };
 
@@ -113,7 +113,7 @@ function Home() {
   const [timeframe, setTimeframe] = useState<Timeframe>('4H');
   const [selectedSymbol, setSelectedSymbol] = useState('BTC');
   const [refreshing, setRefreshing] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState('just now');
+  const [lastRefresh, setLastRefresh] = useState('только что');
   const [briefPinned, setBriefPinned] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -124,7 +124,7 @@ function Home() {
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
-    document.title = 'BTC Market Console — Decision surface';
+    document.title = 'BTC Market Console — Слой решений';
     document.documentElement.classList.toggle('dark', isDark);
     return () => document.documentElement.classList.remove('dark');
   }, [isDark]);
@@ -145,12 +145,12 @@ function Home() {
     setRefreshing(true);
     window.setTimeout(() => {
       setRefreshing(false);
-      setLastRefresh('just now');
+      setLastRefresh('только что');
     }, 900);
   };
 
   const copyBrief = async () => {
-    await navigator.clipboard?.writeText('BTC remains constructive above 66.9k. Momentum is improving, but leverage is building into 68.8k resistance.');
+    await navigator.clipboard?.writeText('BTC сохраняет конструктивный сценарий выше 66,9k. Импульс улучшается, но на сопротивлении 68,8k растёт кредитное плечо.');
     setBriefPinned(true);
   };
 
@@ -234,7 +234,7 @@ function Home() {
                 </div>
               </div>
               <div className="flex items-center gap-2 sm:gap-3">
-                <div className="hidden items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground lg:flex"><Clock3 size={14} /><span className="data-mono">{lastRefresh === 'just now' ? '10:42:18' : lastRefresh}</span><span className="text-muted-foreground/60">UTC</span></div>
+                <div className="hidden items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground lg:flex"><Clock3 size={14} /><span className="data-mono">{lastRefresh === 'только что' ? '10:42:18' : lastRefresh}</span><span className="text-muted-foreground/60">UTC</span></div>
                 <button data-testid="button-refresh-market" aria-label="Обновить данные рынка" onClick={refreshMarket} className={`group flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium transition-all hover:border-primary/50 hover:text-primary ${refreshing ? 'text-primary' : ''}`}><RefreshCw size={15} className={refreshing ? 'animate-spin' : 'transition-transform group-hover:rotate-45'} /> <span className="hidden sm:block">{refreshing ? 'Синхронизация' : 'Обновить'}</span></button>
                 <button data-testid="button-toggle-notifications" aria-label="Открыть уведомления" onClick={() => setShowNotifications((value) => !value)} className={`relative rounded-lg border border-border bg-card p-2 text-muted-foreground transition-colors hover:text-foreground ${showNotifications ? 'text-primary' : ''}`}><Bell size={17} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-primary" /></button>
                 <button data-testid="button-toggle-theme" aria-label="Переключить тему" onClick={() => setIsDark((value) => !value)} className="hidden rounded-lg border border-border bg-card p-2 text-muted-foreground transition-colors hover:text-foreground sm:block">{isDark ? <Sparkles size={17} /> : <Moon size={17} />}</button>
@@ -313,7 +313,7 @@ function Home() {
                         <Area type="monotone" dataKey="value" stroke="hsl(31 100% 50%)" strokeWidth={2.5} fill="url(#priceFill)" activeDot={{ r: 4, fill: 'hsl(31 100% 50%)', stroke: 'hsl(42 40% 98%)', strokeWidth: 2 }} />
                       </AreaChart>
                     </ResponsiveContainer>
-                    {showMore && <div className="absolute right-3 top-9 z-10 w-40 rounded-lg border border-border bg-card p-1.5 shadow-xl"><button data-testid="button-reset-chart" onClick={() => setShowLevels(true)} className="flex w-full items-center rounded-md px-2.5 py-2 text-left text-xs hover:bg-muted">Reset overlays</button><button data-testid="button-copy-chart" onClick={copyBrief} className="flex w-full items-center rounded-md px-2.5 py-2 text-left text-xs hover:bg-muted">Copy snapshot</button></div>}
+                     {showMore && <div className="absolute right-3 top-9 z-10 w-40 rounded-lg border border-border bg-card p-1.5 shadow-xl"><button data-testid="button-reset-chart" onClick={() => setShowLevels(true)} className="flex w-full items-center rounded-md px-2.5 py-2 text-left text-xs hover:bg-muted">Сбросить уровни</button><button data-testid="button-copy-chart" onClick={copyBrief} className="flex w-full items-center rounded-md px-2.5 py-2 text-left text-xs hover:bg-muted">Скопировать снимок</button></div>}
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border pt-4 sm:grid-cols-4">
                     {[
