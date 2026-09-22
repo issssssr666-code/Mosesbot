@@ -25,6 +25,8 @@ type BinanceKline = [
 ];
 
 type TechnicalPoint = {
+  openTime: number;
+  closeTime: number;
   close: number;
   high: number;
   low: number;
@@ -47,6 +49,8 @@ export type BtcMarketAnalysis = {
   timeframe: BtcTimeframe;
   source: "binance";
   fetchedAt: string;
+  signalCandleTime: string;
+  signalCandleCloseTime: string;
   market: {
     price: number;
     change24hPercent: number;
@@ -207,6 +211,8 @@ const calculatePoints = (candles: BinanceKline[]): TechnicalPoint[] => {
     const signalValue =
       index >= macdOffset ? signal[index - macdOffset] : null;
     return {
+      openTime: candle[0],
+      closeTime: candle[6],
       close: closes[index],
       high: Number(candle[2]),
       low: Number(candle[3]),
@@ -327,6 +333,8 @@ const buildAnalysis = (
     timeframe,
     source: "binance",
     fetchedAt: new Date().toISOString(),
+    signalCandleTime: new Date(latest.openTime).toISOString(),
+    signalCandleCloseTime: new Date(latest.closeTime).toISOString(),
     market: {
       price,
       change24hPercent: Number(ticker.priceChangePercent),
@@ -383,5 +391,6 @@ export const getBtcMarketAnalysis = async (
       "invalid",
     );
   }
-  return buildAnalysis(calculatePoints(candles), ticker, timeframe);
+  const closedCandles = candles.filter((candle) => candle[6] <= Date.now());
+  return buildAnalysis(calculatePoints(closedCandles), ticker, timeframe);
 };
