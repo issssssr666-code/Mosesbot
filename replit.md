@@ -1,6 +1,6 @@
-# [Project name]
+# BTC Market Console
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A focused Bitcoin market-analysis console for reviewing price action, signals, risk context, and validation checks.
 
 ## Run & Operate
 
@@ -22,15 +22,21 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/btc-market-console/src/App.tsx` — single-screen market console and local deterministic analysis data
+- `artifacts/btc-market-console/src/index.css` — console theme, motion, chart, and responsive layout tokens
+- `artifacts/api-server` — shared API service scaffold for future live-data integrations
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The first console surface uses deterministic local data so the analysis experience remains available without third-party credentials or rate limits.
+- The frontend owns its interaction state for timeframe changes, watchlist selection, refresh feedback, notification visibility, and validation filters.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Market overview with BTC price action and selectable timeframes
+- Watchlist for BTC, ETH, SOL, DXY, and NDX context
+- Analyst brief with posture, bias, conviction, and risk
+- Risk dashboard and filterable validation checks
 
 ## User preferences
 

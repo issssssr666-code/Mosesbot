@@ -235,7 +235,25 @@ function Home() {
                 <button data-testid="button-toggle-theme" aria-label="Toggle theme" onClick={() => setIsDark((value) => !value)} className="hidden rounded-lg border border-border bg-card p-2 text-muted-foreground transition-colors hover:text-foreground sm:block">{isDark ? <Sparkles size={17} /> : <Moon size={17} />}</button>
                 <div className="ml-1 grid h-8 w-8 place-items-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">AK</div>
               </div>
-              {showNotifications && <div className="absolute right-4 top-[72px] w-[280px] rounded-xl border border-border bg-card p-4 shadow-2xl sm:right-9"><div className="flex items-center justify-between"><span className="text-sm font-semibold">Desk alerts</span><span className="data-mono text-[10px] text-muted-foreground">01 new</span></div><div className="mt-3 rounded-lg bg-muted/70 p-3"><div className="flex gap-2"><span className="mt-1 h-2 w-2 rounded-full bg-primary" /><div><div className="text-xs font-medium">Resistance cluster updated</div><div className="mt-1 text-[11px] leading-relaxed text-muted-foreground">68.8k now carries $18.4m in overhead liquidity.</div></div></div></div>}
+              {showNotifications && (
+                <div className="absolute right-4 top-[72px] w-[280px] rounded-xl border border-border bg-card p-4 shadow-2xl sm:right-9">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold">Desk alerts</span>
+                    <span className="data-mono text-[10px] text-muted-foreground">01 new</span>
+                  </div>
+                  <div className="mt-3 rounded-lg bg-muted/70 p-3">
+                    <div className="flex gap-2">
+                      <span className="mt-1 h-2 w-2 rounded-full bg-primary" />
+                      <div>
+                        <div className="text-xs font-medium">Resistance cluster updated</div>
+                        <div className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                          68.8k now carries $18.4m in overhead liquidity.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </header>
 
