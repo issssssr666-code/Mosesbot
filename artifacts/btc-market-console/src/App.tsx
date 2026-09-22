@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   Activity,
+  AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
   Bell,
@@ -14,11 +15,13 @@ import {
   Gauge,
   LayoutDashboard,
   Menu,
+  MessageCircle,
   MoreHorizontal,
   Moon,
   Pin,
   RefreshCw,
   Search,
+  Send,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
@@ -112,8 +115,58 @@ type TechnicalAnalysis = {
   levelsSection: AnalysisSection;
   scenarioSection: AnalysisSection;
 };
+type MarketNewsItem = {
+  id: number;
+  source: string;
+  canonicalUrl: string;
+  publishedAt: string;
+  title: string;
+  summary: string;
+  category: string;
+  sentiment: 'positive' | 'neutral' | 'negative';
+  impactScore: number;
+  impactDirection: 'positive' | 'neutral' | 'negative';
+};
+type MarketSentiment = {
+  label: 'positive' | 'neutral' | 'negative';
+  score: number;
+  newsCount: number;
+  positiveCount: number;
+  neutralCount: number;
+  negativeCount: number;
+  calculatedAt: string;
+  lookbackHours: number;
+  topNews: MarketNewsItem[];
+  risks: string[];
+  sourceStatus: { source: string; ok: boolean; error?: string }[];
+};
+type MarketContext = {
+  technical: { scenario: string };
+  sentiment: MarketSentiment | null;
+  alignment: string;
+};
+type ForumThread = {
+  id: number;
+  title: string;
+  body: string;
+  category: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string;
+  lastActivityAt: string;
+  replyCount: number;
+};
+type ForumPost = {
+  id: number;
+  threadId: number;
+  body: string;
+  authorName: string;
+  createdAt: string;
+};
+type ForumThreadDetail = Omit<ForumThread, 'replyCount'> & { posts: ForumPost[] };
 
 const BINANCE_API = 'https://api.binance.com/api/v3';
+const API_BASE = '/api';
 const timeframeRequests: Record<Timeframe, { interval: string; historyLimit: number; displayLimit: number }> = {
   '1H': { interval: '1h', historyLimit: 200, displayLimit: 24 },
   '4H': { interval: '4h', historyLimit: 200, displayLimit: 24 },
@@ -149,6 +202,24 @@ const formatChartLabel = (timestamp: number, timeframe: Timeframe) => new Intl.D
     : { hour: '2-digit', minute: '2-digit', hour12: false },
 ).format(new Date(timestamp));
 const formatCompactBtc = (value: number) => `${value.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} BTC`;
+const formatRelativeTime = (value: string) => {
+  const ageMinutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60_000));
+  if (ageMinutes < 60) return `${ageMinutes} мин назад`;
+  if (ageMinutes < 1_440) return `${Math.round(ageMinutes / 60)} ч назад`;
+  return `${Math.round(ageMinutes / 1_440)} дн назад`;
+};
+const sentimentLabel: Record<MarketSentiment['label'], string> = {
+  positive: 'Позитивное',
+  neutral: 'Нейтральное',
+  negative: 'Негативное',
+};
+const categoryLabels: Record<string, string> = {
+  general: 'Общее',
+  technical: 'Техника',
+  news: 'Новости',
+  risk: 'Риски',
+  paper: 'Paper trading',
+};
 
 const calculateEma = (values: number[], period: number): (number | null)[] => {
   const result = Array<number | null>(values.length).fill(null);
@@ -329,6 +400,22 @@ function Home() {
   const [validationFilter, setValidationFilter] = useState<ValidationFilter>('All checks');
   const [search, setSearch] = useState('');
   const [isDark, setIsDark] = useState(false);
+  const [marketContext, setMarketContext] = useState<MarketContext | null>(null);
+  const [contextLoading, setContextLoading] = useState(false);
+  const [contextError, setContextError] = useState<string | null>(null);
+  const [forumThreads, setForumThreads] = useState<ForumThread[]>([]);
+  const [forumCategory, setForumCategory] = useState('all');
+  const [selectedThreadId, setSelectedThreadId] = useState<number | null>(null);
+  const [selectedThread, setSelectedThread] = useState<ForumThreadDetail | null>(null);
+  const [forumLoading, setForumLoading] = useState(true);
+  const [forumBusy, setForumBusy] = useState(false);
+  const [forumError, setForumError] = useState<string | null>(null);
+  const [authorName, setAuthorName] = useState(() => {
+    if (typeof window === 'undefined') return 'Наблюдатель';
+    return window.localStorage.getItem('moses-forum-name') ?? 'Наблюдатель';
+  });
+  const [threadForm, setThreadForm] = useState({ title: '', body: '', category: 'general' });
+  const [replyBody, setReplyBody] = useState('');
 
   useEffect(() => {
     document.title = 'BTC Market Console — Слой решений';
@@ -409,6 +496,118 @@ function Home() {
   useEffect(() => {
     void loadMarket(timeframe);
   }, [loadMarket, timeframe]);
+
+  const loadMarketContext = useCallback(async (period: Timeframe) => {
+    setContextLoading(true);
+    setContextError(null);
+    try {
+      const response = await fetch(`${API_BASE}/moses/market-context?timeframe=${period}`);
+      const payload = await response.json() as MarketContext & { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? 'Не удалось загрузить рыночный фон');
+      setMarketContext(payload);
+    } catch (error) {
+      setContextError(error instanceof Error ? error.message : 'Рыночный фон недоступен');
+    } finally {
+      setContextLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadMarketContext(timeframe);
+  }, [loadMarketContext, timeframe]);
+
+  const loadForumThreads = useCallback(async (category: string) => {
+    setForumLoading(true);
+    setForumError(null);
+    try {
+      const query = category === 'all' ? '' : `?category=${category}`;
+      const response = await fetch(`${API_BASE}/forum/threads${query}`);
+      const payload = await response.json() as ForumThread[] & { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? 'Не удалось загрузить форум');
+      setForumThreads(payload);
+      if (selectedThreadId && !payload.some((thread) => thread.id === selectedThreadId)) {
+        setSelectedThreadId(null);
+        setSelectedThread(null);
+      }
+    } catch (error) {
+      setForumError(error instanceof Error ? error.message : 'Форум недоступен');
+    } finally {
+      setForumLoading(false);
+    }
+  }, [selectedThreadId]);
+
+  useEffect(() => {
+    void loadForumThreads(forumCategory);
+  }, [forumCategory, loadForumThreads]);
+
+  const openThread = async (threadId: number) => {
+    setSelectedThreadId(threadId);
+    setForumError(null);
+    try {
+      const response = await fetch(`${API_BASE}/forum/threads/${threadId}`);
+      const payload = await response.json() as ForumThreadDetail & { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? 'Не удалось открыть тему');
+      setSelectedThread(payload);
+    } catch (error) {
+      setForumError(error instanceof Error ? error.message : 'Не удалось открыть тему');
+    }
+  };
+
+  const rememberAuthor = () => {
+    const name = authorName.trim() || 'Наблюдатель';
+    setAuthorName(name);
+    window.localStorage.setItem('moses-forum-name', name);
+    return name;
+  };
+
+  const createThread = async () => {
+    const name = rememberAuthor();
+    if (threadForm.title.trim().length < 3 || !threadForm.body.trim()) {
+      setForumError('Добавьте заголовок и текст темы.');
+      return;
+    }
+    setForumBusy(true);
+    setForumError(null);
+    try {
+      const response = await fetch(`${API_BASE}/forum/threads`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...threadForm, authorName: name }),
+      });
+      const payload = await response.json() as ForumThread & { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? 'Не удалось создать тему');
+      setThreadForm({ title: '', body: '', category: 'general' });
+      await loadForumThreads(forumCategory);
+      await openThread(payload.id);
+    } catch (error) {
+      setForumError(error instanceof Error ? error.message : 'Не удалось создать тему');
+    } finally {
+      setForumBusy(false);
+    }
+  };
+
+  const createReply = async () => {
+    if (!selectedThreadId || !replyBody.trim()) return;
+    const name = rememberAuthor();
+    setForumBusy(true);
+    setForumError(null);
+    try {
+      const response = await fetch(`${API_BASE}/forum/threads/${selectedThreadId}/posts`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ body: replyBody, authorName: name }),
+      });
+      const payload = await response.json() as ForumPost & { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? 'Не удалось отправить ответ');
+      setReplyBody('');
+      await openThread(selectedThreadId);
+      await loadForumThreads(forumCategory);
+    } catch (error) {
+      setForumError(error instanceof Error ? error.message : 'Не удалось отправить ответ');
+    } finally {
+      setForumBusy(false);
+    }
+  };
 
   const refreshMarket = () => {
     if (refreshing) return;
