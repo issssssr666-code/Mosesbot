@@ -2,6 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import {
   db,
   paperAccountsTable,
+  paperScenarioObservationsTable,
   paperTradesTable,
   type PaperAccount,
   type PaperTrade,
@@ -35,6 +36,9 @@ export type PaperTradeView = {
   stopLoss: number;
   takeProfit1: number;
   takeProfit2: number;
+  remainingQuantity: number;
+  currentPrice: number | null;
+  currentPnl: number | null;
   exitPrice: number | null;
   exitReason: string | null;
   netPnl: number;
@@ -48,11 +52,17 @@ export type PaperAccountSnapshot = {
   recentTrades: PaperTradeView[];
   stats: {
     tradeCount: number;
+    longSignalCount: number;
+    shortSignalCount: number;
+    neutralSignalCount: number;
+    cancelledTradeCount: number;
     closedTradeCount: number;
     profitableTradeCount: number;
     losingTradeCount: number;
     realizedPnl: number;
     winRate: number;
+    averageWin: number;
+    averageLoss: number;
     averageResult: number;
     maxDrawdown: number;
     profitFactor: number | null;
@@ -65,7 +75,11 @@ const numberValue = (value: string | number | null | undefined): number =>
 
 const fixed = (value: number): string => value.toFixed(8);
 
-const tradeView = (trade: PaperTrade): PaperTradeView => ({
+const tradeView = (
+  trade: PaperTrade,
+  currentPrice: number | null = null,
+  currentPnl: number | null = null,
+): PaperTradeView => ({
   id: trade.id,
   status: trade.status,
   symbol: trade.symbol,
@@ -77,6 +91,9 @@ const tradeView = (trade: PaperTrade): PaperTradeView => ({
   stopLoss: numberValue(trade.stopLoss),
   takeProfit1: numberValue(trade.takeProfit1),
   takeProfit2: numberValue(trade.takeProfit2),
+  remainingQuantity: numberValue(trade.remainingQuantity),
+  currentPrice,
+  currentPnl,
   exitPrice: trade.exitPrice == null ? null : numberValue(trade.exitPrice),
   exitReason: trade.exitReason,
   netPnl: numberValue(trade.netPnl),
@@ -130,6 +147,27 @@ const getAllTrades = async (): Promise<PaperTrade[]> =>
     .from(paperTradesTable)
     .where(eq(paperTradesTable.accountId, ACCOUNT_ID))
     .orderBy(desc(paperTradesTable.id));
+
+const getScenarioObservations = async () =>
+  db
+    .select()
+    .from(paperScenarioObservationsTable)
+    .where(eq(paperScenarioObservationsTable.accountId, ACCOUNT_ID))
+    .orderBy(desc(paperScenarioObservationsTable.id));
+
+const recordScenarioObservation = async (analysis: BtcMarketAnalysis): Promise<void> => {
+  await db
+    .insert(paperScenarioObservationsTable)
+    .values({
+      accountId: ACCOUNT_ID,
+      symbol: analysis.symbol,
+      timeframe: analysis.timeframe,
+      direction: directionForScenario(analysis.scenario),
+      scenario: analysis.scenario,
+      signalCandleTime: new Date(analysis.signalCandleTime),
+    })
+    .onConflictDoNothing();
+};
 
 const directionForScenario = (scenario: string): "LONG" | "SHORT" | null =>
   scenario === "Бычий сценарий" ? "LONG" : scenario === "Медвежий сценарий" ? "SHORT" : null;
@@ -401,6 +439,7 @@ export const refreshPaperTrading = async (): Promise<void> => {
       try {
         const analysis = await getBtcMarketAnalysis(timeframe);
         analyses.push(analysis);
+        await recordScenarioObservation(analysis);
         const openTrades = await getOpenTrades(timeframe);
         for (const trade of openTrades) {
           await evaluateOpenTrade(trade, analysis);

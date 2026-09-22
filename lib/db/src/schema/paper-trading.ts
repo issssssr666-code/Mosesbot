@@ -58,13 +58,45 @@ export const paperTradesTable = pgTable(
   }),
 );
 
+export const paperScenarioObservationsTable = pgTable(
+  "paper_scenario_observations",
+  {
+    id: serial("id").primaryKey(),
+    accountId: integer("account_id").notNull().references(() => paperAccountsTable.id),
+    symbol: text("symbol").notNull(),
+    timeframe: text("timeframe").notNull(),
+    direction: text("direction"),
+    scenario: text("scenario").notNull(),
+    signalCandleTime: timestamp("signal_candle_time", { withTimezone: true }).notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    scenarioIdentity: uniqueIndex("paper_scenario_observation_identity").on(
+      table.accountId,
+      table.timeframe,
+      table.signalCandleTime,
+      table.scenario,
+    ),
+  }),
+);
+
 export const insertPaperAccountSchema = createInsertSchema(paperAccountsTable);
 export const insertPaperTradeSchema = createInsertSchema(paperTradesTable).omit({
   id: true,
   createdAt: true,
 });
+export const insertPaperScenarioObservationSchema = createInsertSchema(
+  paperScenarioObservationsTable,
+).omit({
+  id: true,
+  observedAt: true,
+});
 
 export type InsertPaperAccount = z.infer<typeof insertPaperAccountSchema>;
 export type InsertPaperTrade = z.infer<typeof insertPaperTradeSchema>;
+export type InsertPaperScenarioObservation = z.infer<
+  typeof insertPaperScenarioObservationSchema
+>;
 export type PaperAccount = typeof paperAccountsTable.$inferSelect;
 export type PaperTrade = typeof paperTradesTable.$inferSelect;
+export type PaperScenarioObservation = typeof paperScenarioObservationsTable.$inferSelect;
