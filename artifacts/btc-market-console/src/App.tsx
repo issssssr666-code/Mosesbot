@@ -185,11 +185,11 @@ const calculateTechnicalPoints = (candles: BinanceKline[], timeframe: Timeframe)
     fastEma[index] !== null && slowEma[index] !== null ? fastEma[index] - slowEma[index] : null
   ));
   const signal = calculateEma(macd.filter((value): value is number => value !== null), 9);
-  const signalOffset = macd.findIndex((value) => value !== null) + 8;
+  const macdOffset = macd.findIndex((value) => value !== null);
 
   return candles.map((candle, index) => {
     const macdValue = macd[index];
-    const signalValue = index >= signalOffset ? signal[index - signalOffset] : null;
+    const signalValue = index >= macdOffset ? signal[index - macdOffset] : null;
     return {
       label: formatChartLabel(candle[0], timeframe),
       value: closes[index],
