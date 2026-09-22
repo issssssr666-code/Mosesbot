@@ -168,13 +168,6 @@ const JOURNAL_ERROR_FACTORS = {
 const resultLabel = (pnl: number): string =>
   pnl > EPSILON ? "Прибыль" : pnl < -EPSILON ? "Убыток" : "Безубыток";
 
-const journalClassLabel = (tradeClass: PaperTradeJournalClass): string =>
-  tradeClass === "successful_signal"
-    ? "Успешный сигнал"
-    : tradeClass === "erroneous_signal"
-      ? "Ошибочный сигнал"
-      : "Слабый сигнал";
-
 const alertEventView = (event: PaperAlertEvent): PaperAlertEventView => ({
   id: event.id,
   tradeId: event.tradeId,
@@ -402,15 +395,6 @@ export const getPaperLessons = async (): Promise<PaperLessons> => {
     .where(eq(paperTradeJournalsTable.accountId, ACCOUNT_ID))
     .orderBy(desc(paperTradeJournalsTable.id));
   const journals = rows.map(journalView);
-  const profitable = journals.filter((journal) => journal.pnl > EPSILON);
-  const losing = journals.filter((journal) => journal.pnl < -EPSILON);
-  const conditionGroups = (source: PaperTradeJournalView[]) =>
-    groupJournals(
-      source.flatMap((journal) =>
-        journal.confirmedFactors.map(() => journal),
-      ),
-      (journal) => journal.confirmedFactors.find((factor) => factor) ?? "—",
-    );
   const profitableEntryConditions = new Map<string, PaperTradeJournalView[]>();
   const losingEntryConditions = new Map<string, PaperTradeJournalView[]>();
   const repeatingErrors = new Map<string, PaperTradeJournalView[]>();
@@ -682,6 +666,156 @@ const positionPnl = (
     Math.abs(entryPrice - marketEntryPrice) * quantity +
     Math.abs(exitPrice - marketPrice) * quantity;
   return { gross, fees, slippageCost, net: gross - fees, exitPrice };
+};
+
+const buildPaperTradeJournal = (
+  trade: PaperTrade,
+): {
+  entryTime: Date;
+  exitTime: Date;
+  indicators: PaperTradeJournalView["indicators"];
+  result: string;
+  pnl: number;
+  durationSeconds: number;
+  rMultiple: number;
+  confirmedFactors: string[];
+  errorFactors: string[];
+  tradeClass: PaperTradeJournalClass;
+} | null => {
+  if (trade.status !== "closed" || !trade.exitTime) return null;
+
+  const indicators = {
+    ema21: numberValue(trade.indicators.ema21),
+    ema50: numberValue(trade.indicators.ema50),
+    rsi14: numberValue(trade.indicators.rsi14),
+    macd: numberValue(trade.indicators.macd),
+    macdSignal: numberValue(trade.indicators.signal),
+    macdHistogram: numberValue(trade.indicators.histogram),
+    candleVolume: numberValue(trade.indicators.candleVolume),
+    averageVolume20: numberValue(trade.indicators.averageVolume20),
+    volumeRatio20: numberValue(trade.indicators.volumeRatio20),
+    support: numberValue(trade.indicators.support),
+    resistance: numberValue(trade.indicators.resistance),
+  };
+  const isLong = trade.direction === "LONG";
+  const signalPrice = numberValue(trade.indicators.signalPrice) || numberValue(trade.entryMarketPrice);
+  const emaTrendConfirmed = isLong
+    ? indicators.ema21 >= indicators.ema50
+    : indicators.ema21 <= indicators.ema50;
+  const priceEmaConfirmed = isLong
+    ? signalPrice >= indicators.ema21 && signalPrice >= indicators.ema50
+    : signalPrice <= indicators.ema21 && signalPrice <= indicators.ema50;
+  const rsiConfirmed = isLong
+    ? indicators.rsi14 >= 50 && indicators.rsi14 <= 70
+    : indicators.rsi14 <= 50 && indicators.rsi14 >= 30;
+  const macdConfirmed = isLong
+    ? indicators.macd >= indicators.macdSignal && indicators.macdHistogram >= 0
+    : indicators.macd <= indicators.macdSignal && indicators.macdHistogram <= 0;
+  const volumeConfirmed = indicators.volumeRatio20 >= 1.2;
+  const riskPerUnit = Math.abs(numberValue(trade.entryPrice) - numberValue(trade.stopLoss));
+  const riskAmount = riskPerUnit * numberValue(trade.quantity);
+  const riskReward =
+    riskPerUnit > EPSILON
+      ? Math.abs(numberValue(trade.takeProfit2) - numberValue(trade.entryPrice)) / riskPerUnit
+      : 0;
+  const levelsConfirmed =
+    riskReward >= 1.5 &&
+    (isLong
+      ? numberValue(trade.stopLoss) < numberValue(trade.entryPrice)
+      : numberValue(trade.stopLoss) > numberValue(trade.entryPrice));
+  const weakImpulse =
+    Math.abs(indicators.rsi14 - 50) <= 5 ||
+    Math.abs(indicators.macd - indicators.macdSignal) <=
+      Math.max(Math.abs(indicators.macd) * 0.05, 0.000001);
+  const indicatorDivergence =
+    (isLong ? indicators.rsi14 >= 50 : indicators.rsi14 <= 50) !==
+    (isLong ? indicators.macd >= indicators.macdSignal : indicators.macd <= indicators.macdSignal);
+  const loss = numberValue(trade.netPnl) <= EPSILON;
+  const confirmedFactors = [
+    ...(emaTrendConfirmed ? ["Тренд"] : []),
+    ...(priceEmaConfirmed ? ["EMA 21/50"] : []),
+    ...(rsiConfirmed ? ["RSI"] : []),
+    ...(macdConfirmed ? ["MACD"] : []),
+    ...(volumeConfirmed ? ["Объём"] : []),
+    ...(levelsConfirmed ? ["Уровни"] : []),
+  ];
+  const errorFactors = !loss
+    ? []
+    : [
+        ...(weakImpulse ? [JOURNAL_ERROR_FACTORS.weakImpulse] : []),
+        ...(trade.exitReason === "SL" || trade.exitReason === "SCENARIO_CANCELLED"
+          ? [JOURNAL_ERROR_FACTORS.falseBreakout]
+          : []),
+        ...(indicatorDivergence ? [JOURNAL_ERROR_FACTORS.indicatorDivergence] : []),
+        ...(riskReward > 0 && riskReward < 1.5
+          ? [JOURNAL_ERROR_FACTORS.poorRiskReward]
+          : []),
+        ...(indicators.volumeRatio20 < 0.8 ? [JOURNAL_ERROR_FACTORS.insufficientVolume] : []),
+      ];
+  const tradeClass: PaperTradeJournalClass =
+    numberValue(trade.netPnl) > EPSILON
+      ? "successful_signal"
+      : errorFactors.some(
+            (factor) =>
+              factor === JOURNAL_ERROR_FACTORS.falseBreakout ||
+              factor === JOURNAL_ERROR_FACTORS.indicatorDivergence ||
+              factor === JOURNAL_ERROR_FACTORS.poorRiskReward,
+          ) || errorFactors.length >= 2
+        ? "erroneous_signal"
+        : "weak_signal";
+
+  return {
+    entryTime: trade.signalTime,
+    exitTime: trade.exitTime,
+    indicators,
+    result: resultLabel(numberValue(trade.netPnl)),
+    pnl: numberValue(trade.netPnl),
+    durationSeconds: Math.max(
+      0,
+      Math.round((trade.exitTime.getTime() - trade.signalTime.getTime()) / 1000),
+    ),
+    rMultiple: riskAmount > EPSILON ? numberValue(trade.netPnl) / riskAmount : 0,
+    confirmedFactors,
+    errorFactors,
+    tradeClass,
+  };
+};
+
+const recordPaperTradeJournal = async (trade: PaperTrade): Promise<void> => {
+  const analysis = buildPaperTradeJournal(trade);
+  if (!analysis) return;
+  await db
+    .insert(paperTradeJournalsTable)
+    .values({
+      accountId: ACCOUNT_ID,
+      tradeId: trade.id,
+      entryTime: analysis.entryTime,
+      exitTime: analysis.exitTime,
+      symbol: trade.symbol,
+      timeframe: trade.timeframe,
+      direction: trade.direction,
+      scenario: trade.scenario,
+      entryReason: trade.reason,
+      ema21: fixed(analysis.indicators.ema21),
+      ema50: fixed(analysis.indicators.ema50),
+      rsi14: fixed(analysis.indicators.rsi14),
+      macd: fixed(analysis.indicators.macd),
+      macdSignal: fixed(analysis.indicators.macdSignal),
+      macdHistogram: fixed(analysis.indicators.macdHistogram),
+      candleVolume: fixed(analysis.indicators.candleVolume),
+      averageVolume20: fixed(analysis.indicators.averageVolume20),
+      volumeRatio20: fixed(analysis.indicators.volumeRatio20),
+      support: fixed(analysis.indicators.support),
+      resistance: fixed(analysis.indicators.resistance),
+      result: analysis.result,
+      pnl: fixed(analysis.pnl),
+      durationSeconds: analysis.durationSeconds,
+      rMultiple: fixed(analysis.rMultiple),
+      confirmedFactors: analysis.confirmedFactors,
+      errorFactors: analysis.errorFactors,
+      tradeClass: analysis.tradeClass,
+    })
+    .onConflictDoNothing({ target: paperTradeJournalsTable.tradeIdentity });
 };
 
 type PaperCloseContext = {
