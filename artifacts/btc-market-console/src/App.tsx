@@ -88,6 +88,13 @@ type BinanceTicker = {
   quoteVolume: string;
 };
 type BinanceKline = [number, string, string, string, string, string, number, string];
+type AnalysisTone = 'good' | 'warn' | 'neutral';
+type AnalysisSection = {
+  title: string;
+  value: string;
+  reason: string;
+  tone: AnalysisTone;
+};
 type TechnicalAnalysis = {
   ema21: number;
   ema50: number;
@@ -99,7 +106,11 @@ type TechnicalAnalysis = {
   support: number;
   resistance: number;
   trend: 'Восходящий' | 'Нисходящий' | 'Боковой';
-  summary: string;
+  trendSection: AnalysisSection;
+  impulseSection: AnalysisSection;
+  volumeSection: AnalysisSection;
+  levelsSection: AnalysisSection;
+  scenarioSection: AnalysisSection;
 };
 
 const BINANCE_API = 'https://api.binance.com/api/v3';
