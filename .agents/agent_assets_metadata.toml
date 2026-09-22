@@ -70,3 +70,17 @@ mtime_ms = 1790060689617
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:f9de5f6c-9e3b-4d79-8c5a-5a9ae87d6a64/4001f7cd-2323-4e1a-b20f-94051e53f2ef/ac9a4c0e-449e-4c49-bd20-e9d11bc5c647"
 storage_version_token = "1790060705691312"
 content_type = "image/jpeg"
+
+[[outputs]]
+id = "RAHvEiY5Bu2jR_cyx4Arh"
+uri = "file://screenshots/btc-market-console-timeframe-check.jpg"
+type = "image"
+title = "BTC Market Console — проверка таймфреймов"
+description = "Скриншот текущей консоли на 4H с реальными свечами Binance и пересчитанным блоком «Анализ Моисея»."
+logical_id = "ca9349ef-1911-46c4-9492-1108f0311f00"
+content_hash = "sha256:ddc610f1c471a8ec0b501481788b3db4d4fb72766024f2b3eed1428fbe22f719"
+size = 130888
+mtime_ms = 1790060983109
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:f9de5f6c-9e3b-4d79-8c5a-5a9ae87d6a64/ca9349ef-1911-46c4-9492-1108f0311f00/7efebc84-95c7-4d71-8174-55dadf0f60d6"
+storage_version_token = "1790060990431901"
+content_type = "image/jpeg"
