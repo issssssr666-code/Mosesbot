@@ -6,6 +6,12 @@ import {
   type BtcMarketAnalysis,
   type BtcTimeframe,
 } from "./btc-market-analysis";
+import {
+  getPaperAccountSnapshot,
+  refreshPaperTrading,
+  type PaperAccountSnapshot,
+  type PaperTradeView,
+} from "./paper-trading";
 
 type TelegramMessage = {
   chat: { id: number };
@@ -72,6 +78,11 @@ const formatBtc = (value: number) =>
   `${value.toLocaleString("en-US", { maximumFractionDigits: 2 })} BTC`;
 
 const formatPercent = (value: number) => `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+
+const formatMoney = (value: number) =>
+  `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const formatPnl = (value: number) => `${value >= 0 ? "+" : ""}${formatMoney(value)}`;
 
 const timeframeLabel: Record<BtcTimeframe, string> = {
   "1H": "1H",
