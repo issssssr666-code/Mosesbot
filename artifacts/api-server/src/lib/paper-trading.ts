@@ -815,7 +815,7 @@ const recordPaperTradeJournal = async (trade: PaperTrade): Promise<void> => {
       errorFactors: analysis.errorFactors,
       tradeClass: analysis.tradeClass,
     })
-    .onConflictDoNothing({ target: paperTradeJournalsTable.tradeIdentity });
+    .onConflictDoNothing();
 };
 
 type PaperCloseContext = {
