@@ -871,6 +871,8 @@ const applyClose = async (
     .set({ balance: fixed(nextBalance), updatedAt: new Date() })
     .where(eq(paperAccountsTable.id, ACCOUNT_ID));
 
+  await recordPaperTradeJournal(updated);
+
   const eventType = reason as PaperAlertEventType;
   const commonPayload: PaperAlertPayload = {
     price: pnl.exitPrice,
