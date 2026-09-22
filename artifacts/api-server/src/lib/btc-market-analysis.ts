@@ -451,6 +451,18 @@ const buildAnalysis = (
 export const isBtcTimeframe = (value: string): value is BtcTimeframe =>
   value in timeframeConfig;
 
+export const getBtcHistoricalCandles = async (
+  timeframe: BtcTimeframe,
+  startTime: number,
+  endTime: number,
+  limit = 1000,
+): Promise<BinanceKline[]> => {
+  const config = timeframeConfig[timeframe];
+  return fetchBinanceJson<BinanceKline[]>(
+    `/klines?symbol=BTCUSDT&interval=${config.interval}&startTime=${startTime}&endTime=${endTime}&limit=${Math.min(Math.max(limit, 1), 1000)}`,
+  );
+};
+
 export const getBtcMarketAnalysis = async (
   timeframe: BtcTimeframe,
 ): Promise<BtcMarketAnalysis> => {
@@ -473,5 +485,5 @@ export const getBtcMarketAnalysis = async (
     );
   }
   const closedCandles = candles.filter((candle) => candle[6] <= Date.now());
-  return buildAnalysis(calculatePoints(closedCandles), ticker, timeframe);
+  return buildAnalysis(calculateTechnicalPoints(closedCandles), ticker, timeframe);
 };
