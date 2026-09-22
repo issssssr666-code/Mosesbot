@@ -91,23 +91,84 @@ const helpText = [
   "/btc 1w — недельный анализ",
 ].join("\n");
 
-const formatAnalysis = (data: BtcMarketAnalysis): string =>
-  [
+const formatAnalysis = (data: BtcMarketAnalysis): string => {
+  const { price } = data.market;
+  const { ema21, ema50, rsi14, macd, signal, histogram, candleVolume, averageVolume20, volumeRatio20 } =
+    data.indicators;
+  const priceAboveEma21 = price >= ema21;
+  const priceAboveEma50 = price >= ema50;
+  const emaAlignment = ema21 >= ema50 ? "EMA 21 выше EMA 50" : "EMA 21 ниже EMA 50";
+  const pricePosition =
+    priceAboveEma21 && priceAboveEma50
+      ? "Цена выше EMA 21 и EMA 50."
+      : !priceAboveEma21 && !priceAboveEma50
+        ? "Цена ниже EMA 21 и EMA 50."
+        : "Цена находится между EMA 21 и EMA 50.";
+  const rsiDescription =
+    rsi14 >= 70
+      ? "RSI близок к зоне перекупленности"
+      : rsi14 <= 30
+        ? "RSI близок к зоне перепроданности"
+        : rsi14 >= 50
+          ? "RSI выше нейтральной середины"
+          : "RSI ниже нейтральной середины";
+  const macdDescription =
+    macd >= signal
+      ? "MACD выше сигнальной линии"
+      : "MACD ниже сигнальной линии";
+  const rsiMacdAgreement =
+    (rsi14 >= 50 && macd >= signal) || (rsi14 < 50 && macd < signal)
+      ? `RSI и MACD согласованы: ${rsiDescription.toLowerCase()}, ${macdDescription.toLowerCase()}.`
+      : `RSI и MACD расходятся: ${rsiDescription.toLowerCase()}, но ${macdDescription.toLowerCase()}.`;
+  const emaRsiRelationship =
+    priceAboveEma21 && priceAboveEma50 && rsi14 >= 70
+      ? "Цена выше обеих EMA, однако RSI близок к зоне перекупленности — это важное ограничение вывода."
+      : !priceAboveEma21 && !priceAboveEma50 && rsi14 <= 30
+        ? "Цена ниже обеих EMA, при этом RSI близок к зоне перепроданности — показатели направлены одинаково, но RSI указывает на крайнее состояние."
+        : `Цена относительно EMA и RSI не дают полностью одинаковый сигнал: ${pricePosition.toLowerCase()} RSI — ${rsiDescription.toLowerCase()}.`;
+  const volumeDescription =
+    volumeRatio20 >= 1.2
+      ? "Объём выше среднего и подтверждает повышенную активность текущей свечи."
+      : volumeRatio20 <= 0.8
+        ? "Объём ниже среднего и не подтверждает повышенную активность текущей свечи."
+        : "Объём близок к среднему и не даёт отдельного сильного подтверждения.";
+  const mosesExplanation = [
+    emaRsiRelationship,
+    rsiMacdAgreement,
+    `${volumeDescription} Сценарий «${data.scenario}» — описание текущей комбинации показателей, а не прогноз будущей цены.`,
+  ].join(" ");
+
+  return [
     `BTCUSDT · ${timeframeLabel[data.timeframe]}`,
-    `Цена: ${formatPrice(data.market.price)}`,
-    `Изменение 24ч: ${formatPercent(data.market.change24hPercent)}`,
     "",
-    `EMA 21 / EMA 50: ${formatPrice(data.indicators.ema21)} / ${formatPrice(data.indicators.ema50)}`,
-    `RSI 14: ${data.indicators.rsi14.toFixed(2)}`,
-    `MACD: ${data.indicators.macd.toFixed(2)} · сигнал: ${data.indicators.signal.toFixed(2)} · гистограмма: ${data.indicators.histogram.toFixed(2)}`,
-    `Объём: ${formatBtc(data.indicators.candleVolume)} · средний за 20 свечей: ${formatBtc(data.indicators.averageVolume20)}`,
+    "1) Цена и изменение",
+    `Цена: ${formatPrice(price)}`,
+    `Изменение за 24ч: ${formatPercent(data.market.change24hPercent)}`,
+    "",
+    "2) Тренд",
+    `Тренд: ${data.trend}`,
+    `${pricePosition} ${emaAlignment}.`,
+    "",
+    "3) Импульс — RSI и MACD",
+    `RSI 14: ${rsi14.toFixed(2)} — ${rsiDescription}.`,
+    `MACD: ${macd.toFixed(2)} · сигнал: ${signal.toFixed(2)} · гистограмма: ${histogram.toFixed(2)}.`,
+    `${macdDescription}.`,
+    "",
+    "4) Объём",
+    `Текущий объём: ${formatBtc(candleVolume)} · средний за 20 свечей: ${formatBtc(averageVolume20)} · ${volumeRatio20.toFixed(2)}× от среднего.`,
+    "",
+    "5) EMA 21/50",
+    `EMA 21: ${formatPrice(ema21)}`,
+    `EMA 50: ${formatPrice(ema50)}`,
+    "",
+    "6) Поддержка и сопротивление",
     `Поддержка: ${formatPrice(data.levels.support)}`,
     `Сопротивление: ${formatPrice(data.levels.resistance)}`,
     "",
-    `Тренд: ${data.trend}`,
-    `Сценарий: ${data.scenario}`,
-    `Анализ Моисея: ${data.analysis.text}`,
+    "7) Анализ Моисея",
+    mosesExplanation,
   ].join("\n");
+};
 
 const sendMessage = async (
   token: string,
