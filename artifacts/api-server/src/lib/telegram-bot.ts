@@ -264,6 +264,36 @@ const handleMessage = async (token: string, message: TelegramMessage): Promise<v
     await sendMessage(token, message.chat.id, helpText);
     return;
   }
+  if (command === "/paper") {
+    const subcommand = argument?.toLowerCase() ?? "status";
+    if (!["status", "trades", "stats"].includes(subcommand)) {
+      await sendMessage(
+        token,
+        message.chat.id,
+        "Используйте /paper, /paper status, /paper trades или /paper stats.",
+      );
+      return;
+    }
+    try {
+      await refreshPaperTrading();
+      const snapshot = await getPaperAccountSnapshot();
+      const response =
+        subcommand === "trades"
+          ? formatPaperTrades(snapshot)
+          : subcommand === "stats"
+            ? formatPaperStats(snapshot)
+            : formatPaperStatus(snapshot);
+      await sendMessage(token, message.chat.id, response);
+    } catch (error) {
+      logger.warn({ error }, "Telegram paper trading command failed");
+      await sendMessage(
+        token,
+        message.chat.id,
+        `Не удалось обновить TEST TRADING: ${error instanceof Error ? error.message : "внутренняя ошибка"}. Попробуйте ещё раз.`,
+      );
+    }
+    return;
+  }
   if (command !== "/btc") return;
 
   const timeframe = argument ?? "4H";
