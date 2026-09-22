@@ -249,8 +249,11 @@ const positionPnl = (
   const direction = trade.direction === "LONG" ? "LONG" : "SHORT";
   const entryPrice = numberValue(trade.entryPrice);
   const marketEntryPrice = numberValue(trade.entryMarketPrice);
+  const tradeSlippageRate = numberValue(trade.slippageBps) / 10_000;
   const exitPrice =
-    direction === "LONG" ? marketPrice * (1 - SLIPPAGE_RATE) : marketPrice * (1 + SLIPPAGE_RATE);
+    direction === "LONG"
+      ? marketPrice * (1 - tradeSlippageRate)
+      : marketPrice * (1 + tradeSlippageRate);
   const gross =
     direction === "LONG"
       ? (exitPrice - entryPrice) * quantity
@@ -313,7 +316,6 @@ const applyClose = async (
 };
 
 const evaluateOpenTrade = async (
-  account: PaperAccount,
   trade: PaperTrade,
   analysis: BtcMarketAnalysis,
 ): Promise<void> => {
@@ -401,7 +403,7 @@ export const refreshPaperTrading = async (): Promise<void> => {
         analyses.push(analysis);
         const openTrades = await getOpenTrades(timeframe);
         for (const trade of openTrades) {
-          await evaluateOpenTrade(account, trade, analysis);
+          await evaluateOpenTrade(trade, analysis);
         }
         const refreshedAccount = await ensurePaperAccount();
         await createSignalIfEligible(refreshedAccount, analysis);
