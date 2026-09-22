@@ -20,6 +20,11 @@ import {
   type PaperTradeJournalView,
   type PaperTradeView,
 } from "./paper-trading";
+import {
+  getRecentBacktestReports,
+  runBacktest,
+  type BacktestReport,
+} from "./backtesting";
 
 type TelegramMessage = {
   chat: { id: number };
@@ -367,6 +372,41 @@ const formatPaperLessons = (
     "",
     "Повторяющиеся ошибки:",
     formatLessonGroups(lessons.repeatingErrors),
+  ].join("\n");
+
+const formatBacktestReport = (report: BacktestReport): string =>
+  [
+    "BACKTEST Моисея · BTCUSDT",
+    `Период: ${report.periodStart} → ${report.periodEnd}`,
+    `Таймфрейм: ${report.timeframe} · свечей: ${report.candleCount}`,
+    "",
+    `Сигналов: ${report.signalCount}`,
+    `Сделок: ${report.tradeCount}`,
+    `LONG / SHORT: ${report.longTradeCount} / ${report.shortTradeCount}`,
+    `Прибыльных / убыточных: ${report.profitableTradeCount} / ${report.losingTradeCount}`,
+    `Win rate: ${report.winRate.toFixed(2)}%`,
+    `Общий P&L: ${formatPnl(report.totalPnl)}`,
+    `Максимальная просадка: ${formatMoney(report.maxDrawdown)}`,
+    `Profit factor: ${report.profitFactor == null ? "не рассчитан" : report.profitFactor.toFixed(2)}`,
+    `Expectancy: ${formatPnl(report.expectancy)}`,
+    `Средняя длительность: ${formatDuration(report.averageDurationSeconds)}`,
+    `Средний R: ${report.averageRMultiple.toFixed(2)}`,
+    `Баланс: ${formatMoney(report.initialBalance)} → ${formatMoney(report.finalBalance)}`,
+    "",
+    "Вход выполнялся на открытии следующей свечи. Если внутри одной свечи одновременно задевались SL и TP, консервативно учитывался SL.",
+  ].join("\n");
+
+const formatBacktestStats = (reports: BacktestReport[]): string =>
+  [
+    "BACKTEST Моисея · последние запуски",
+    reports.length > 0
+      ? reports
+          .map(
+            (report) =>
+              `${report.timeframe} · ${report.periodStart.slice(0, 10)} → ${report.periodEnd.slice(0, 10)} · сделок ${report.tradeCount} · P&L ${formatPnl(report.totalPnl)} · win rate ${report.winRate.toFixed(1)}%`,
+          )
+          .join("\n")
+      : "Сохранённых запусков пока нет. Выполните /backtest или /backtest 4h.",
   ].join("\n");
 
 const formatAnalysis = (data: BtcMarketAnalysis): string => {
