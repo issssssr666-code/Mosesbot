@@ -264,7 +264,6 @@ const positionPnl = (
 };
 
 const applyClose = async (
-  account: PaperAccount,
   trade: PaperTrade,
   marketPrice: number,
   quantity: number,
@@ -297,7 +296,15 @@ const applyClose = async (
     .where(eq(paperTradesTable.id, trade.id))
     .returning();
 
-  const nextBalance = numberValue(account.balance) + pnl.net;
+  const [currentAccount] = await db
+    .select()
+    .from(paperAccountsTable)
+    .where(eq(paperAccountsTable.id, ACCOUNT_ID))
+    .limit(1);
+  if (!currentAccount) {
+    throw new Error("Виртуальный счёт не найден при закрытии позиции");
+  }
+  const nextBalance = numberValue(currentAccount.balance) + pnl.net;
   await db
     .update(paperAccountsTable)
     .set({ balance: fixed(nextBalance), updatedAt: new Date() })
@@ -316,7 +323,7 @@ const evaluateOpenTrade = async (
       ? price <= numberValue(trade.stopLoss)
       : price >= numberValue(trade.stopLoss);
   if (stopHit) {
-    await applyClose(account, trade, price, numberValue(trade.remainingQuantity), "SL");
+    await applyClose(trade, price, numberValue(trade.remainingQuantity), "SL");
     return;
   }
 
@@ -328,7 +335,6 @@ const evaluateOpenTrade = async (
       : price <= numberValue(current.takeProfit1));
   if (tp1Hit) {
     current = await applyClose(
-      account,
       current,
       price,
       numberValue(current.remainingQuantity) / 2,
@@ -342,14 +348,19 @@ const evaluateOpenTrade = async (
       ? price >= numberValue(current.takeProfit2)
       : price <= numberValue(current.takeProfit2);
   if (tp2Hit && current.status === "open") {
-    await applyClose(account, current, price, numberValue(current.remainingQuantity), "TP2");
+    await applyClose(current, price, numberValue(current.remainingQuantity), "TP2");
     return;
   }
 
   const expectedDirection = directionForScenario(analysis.scenario);
-  if (expectedDirection && expectedDirection !== current.direction && current.status === "open") {
+  const hasNewClosedCandle =
+    new Date(analysis.signalCandleTime).getTime() > trade.signalCandleTime.getTime();
+  if (
+    hasNewClosedCandle &&
+    expectedDirection !== current.direction &&
+    current.status === "open"
+  ) {
     await applyClose(
-      account,
       current,
       price,
       numberValue(current.remainingQuantity),
@@ -413,6 +424,19 @@ export const getPaperAccountSnapshot = async (): Promise<PaperAccountSnapshot> =
   const trades = await getAllTrades();
   const openPositions = trades.filter((trade) => trade.status === "open");
   const closedTrades = trades.filter((trade) => trade.status === "closed");
+  const openAnalyses = await Promise.all(
+    [...new Set(openPositions.map((trade) => trade.timeframe as BtcTimeframe))].map((timeframe) =>
+      getBtcMarketAnalysis(timeframe),
+    ),
+  );
+  const currentPrices = new Map(
+    openAnalyses.map((analysis) => [analysis.timeframe, analysis.market.price]),
+  );
+  const unrealizedPnl = openPositions.reduce((sum, trade) => {
+    const price = currentPrices.get(trade.timeframe);
+    if (price == null) return sum;
+    return sum + positionPnl(trade, price, numberValue(trade.remainingQuantity)).net;
+  }, 0);
   const realizedPnl = closedTrades.reduce((sum, trade) => sum + numberValue(trade.netPnl), 0);
   const profitableTrades = closedTrades.filter((trade) => numberValue(trade.netPnl) > 0);
   const losingTrades = closedTrades.filter((trade) => numberValue(trade.netPnl) < 0);
@@ -423,8 +447,8 @@ export const getPaperAccountSnapshot = async (): Promise<PaperAccountSnapshot> =
 
   return {
     balance: numberValue(account.balance),
-    equity: numberValue(account.balance),
-    unrealizedPnl: 0,
+    equity: numberValue(account.balance) + unrealizedPnl,
+    unrealizedPnl,
     openPositions: openPositions.map(tradeView),
     recentTrades: trades.slice(0, 10).map(tradeView),
     stats: {
