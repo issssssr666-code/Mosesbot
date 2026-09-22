@@ -137,6 +137,104 @@ const formatChartLabel = (timestamp: number, timeframe: Timeframe) => new Intl.D
     ? { day: '2-digit', month: 'short' }
     : { hour: '2-digit', minute: '2-digit', hour12: false },
 ).format(new Date(timestamp));
+const formatCompactBtc = (value: number) => `${value.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} BTC`;
+
+const calculateEma = (values: number[], period: number): (number | null)[] => {
+  const result = Array<number | null>(values.length).fill(null);
+  if (values.length < period) return result;
+  let ema = values.slice(0, period).reduce((sum, value) => sum + value, 0) / period;
+  result[period - 1] = ema;
+  const multiplier = 2 / (period + 1);
+  for (let index = period; index < values.length; index += 1) {
+    ema = (values[index] - ema) * multiplier + ema;
+    result[index] = ema;
+  }
+  return result;
+};
+
+const calculateRsi = (values: number[], period = 14): (number | null)[] => {
+  const result = Array<number | null>(values.length).fill(null);
+  if (values.length <= period) return result;
+  let averageGain = 0;
+  let averageLoss = 0;
+  for (let index = 1; index <= period; index += 1) {
+    const change = values[index] - values[index - 1];
+    averageGain += Math.max(change, 0);
+    averageLoss += Math.max(-change, 0);
+  }
+  averageGain /= period;
+  averageLoss /= period;
+  result[period] = averageLoss === 0 ? 100 : 100 - 100 / (1 + averageGain / averageLoss);
+  for (let index = period + 1; index < values.length; index += 1) {
+    const change = values[index] - values[index - 1];
+    averageGain = (averageGain * (period - 1) + Math.max(change, 0)) / period;
+    averageLoss = (averageLoss * (period - 1) + Math.max(-change, 0)) / period;
+    result[index] = averageLoss === 0 ? 100 : 100 - 100 / (1 + averageGain / averageLoss);
+  }
+  return result;
+};
+
+const calculateTechnicalPoints = (candles: BinanceKline[], timeframe: Timeframe): TechnicalPoint[] => {
+  const closes = candles.map((candle) => Number(candle[4]));
+  const ema21 = calculateEma(closes, 21);
+  const ema50 = calculateEma(closes, 50);
+  const rsi = calculateRsi(closes);
+  const fastEma = calculateEma(closes, 12);
+  const slowEma = calculateEma(closes, 26);
+  const macd = closes.map((_, index) => (
+    fastEma[index] !== null && slowEma[index] !== null ? fastEma[index] - slowEma[index] : null
+  ));
+  const signal = calculateEma(macd.filter((value): value is number => value !== null), 9);
+  const signalOffset = macd.findIndex((value) => value !== null) + 8;
+
+  return candles.map((candle, index) => {
+    const macdValue = macd[index];
+    const signalValue = index >= signalOffset ? signal[index - signalOffset] : null;
+    return {
+      label: formatChartLabel(candle[0], timeframe),
+      value: closes[index],
+      high: Number(candle[2]),
+      low: Number(candle[3]),
+      volume: Number(candle[5]),
+      ema21: ema21[index],
+      ema50: ema50[index],
+      rsi: rsi[index],
+      macd: macdValue,
+      signal: signalValue,
+      histogram: macdValue !== null && signalValue !== null ? macdValue - signalValue : null,
+    };
+  });
+};
+
+const createTechnicalAnalysis = (points: TechnicalPoint[], price: number): TechnicalAnalysis | null => {
+  const latest = points.at(-1);
+  if (!latest || latest.ema21 === null || latest.ema50 === null || latest.rsi === null || latest.macd === null || latest.signal === null || latest.histogram === null) {
+    return null;
+  }
+  const recent = points.slice(-50);
+  const support = Math.min(...recent.map((point) => point.low));
+  const resistance = Math.max(...recent.map((point) => point.high));
+  const trend = price > latest.ema21 && latest.ema21 > latest.ema50
+    ? 'Восходящий'
+    : price < latest.ema21 && latest.ema21 < latest.ema50
+      ? 'Нисходящий'
+      : 'Боковой';
+  const rsiState = latest.rsi >= 70 ? 'RSI показывает перегретость' : latest.rsi <= 30 ? 'RSI указывает на перепроданность' : 'RSI остаётся в нейтральной зоне';
+  const macdState = latest.histogram >= 0 ? 'MACD поддерживает импульс покупателей' : 'MACD указывает на ослабление импульса';
+  return {
+    ema21: latest.ema21,
+    ema50: latest.ema50,
+    rsi: latest.rsi,
+    macd: latest.macd,
+    signal: latest.signal,
+    histogram: latest.histogram,
+    volume: latest.volume,
+    support,
+    resistance,
+    trend,
+    summary: `${trend} тренд относительно EMA 21/50. ${rsiState}; ${macdState}. Ближайшая рабочая зона — ${formatPrice(support)}–${formatPrice(resistance)}.`,
+  };
+};
 const filterLabels: Record<ValidationFilter, string> = {
   'All checks': 'Все проверки',
   Passed: 'Пройдены',
@@ -149,7 +247,8 @@ function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState('только что');
   const [liveMarket, setLiveMarket] = useState<LiveMarket | null>(null);
-  const [chartData, setChartData] = useState<ChartPoint[]>([]);
+  const [technicalData, setTechnicalData] = useState<TechnicalPoint[]>([]);
+  const [analysis, setAnalysis] = useState<TechnicalAnalysis | null>(null);
   const [marketError, setMarketError] = useState<string | null>(null);
   const [briefPinned, setBriefPinned] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -187,15 +286,24 @@ function Home() {
     () => checks.filter((check) => validationFilter === 'All checks' || check.status === validationFilter),
     [validationFilter],
   );
+  const chartData = useMemo(
+    () => technicalData.slice(-timeframeRequests[timeframe].displayLimit),
+    [technicalData, timeframe],
+  );
+  const requestSequence = useRef(0);
 
   const loadMarket = useCallback(async (period: Timeframe) => {
+    const sequence = requestSequence.current + 1;
+    requestSequence.current = sequence;
     setRefreshing(true);
     setMarketError(null);
     const request = timeframeRequests[period];
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 12000);
     try {
       const [tickerResponse, candlesResponse] = await Promise.all([
-        fetch(`${BINANCE_API}/ticker/24hr?symbol=BTCUSDT`),
-        fetch(`${BINANCE_API}/klines?symbol=BTCUSDT&interval=${request.interval}&limit=${request.limit}`),
+        fetch(`${BINANCE_API}/ticker/24hr?symbol=BTCUSDT`, { signal: controller.signal }),
+        fetch(`${BINANCE_API}/klines?symbol=BTCUSDT&interval=${request.interval}&limit=${request.historyLimit}`, { signal: controller.signal }),
       ]);
       if (!tickerResponse.ok || !candlesResponse.ok) {
         throw new Error('Binance не вернул рыночные данные');
@@ -205,22 +313,25 @@ function Home() {
       if (!Array.isArray(candles) || candles.length === 0) {
         throw new Error('Поток свечей BTC пуст');
       }
+      if (sequence !== requestSequence.current) return;
+      const price = Number(ticker.lastPrice);
+      const points = calculateTechnicalPoints(candles, period);
       setLiveMarket({
-        price: Number(ticker.lastPrice),
+        price,
         move: Number(ticker.priceChangePercent),
         high: Number(ticker.highPrice),
         low: Number(ticker.lowPrice),
         quoteVolume: Number(ticker.quoteVolume),
       });
-      setChartData(candles.map(([timestamp, , , , close]) => ({
-        label: formatChartLabel(timestamp, period),
-        value: Number(close),
-      })));
+      setTechnicalData(points);
+      setAnalysis(createTechnicalAnalysis(points, price));
       setLastRefresh(new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date()));
     } catch (error) {
+      if (sequence !== requestSequence.current) return;
       setMarketError(error instanceof Error ? error.message : 'Не удалось получить рыночные данные BTC');
     } finally {
-      setRefreshing(false);
+      window.clearTimeout(timeout);
+      if (sequence === requestSequence.current) setRefreshing(false);
     }
   }, []);
 
@@ -234,7 +345,10 @@ function Home() {
   };
 
   const copyBrief = async () => {
-    await navigator.clipboard?.writeText('BTC сохраняет конструктивный сценарий выше 66,9k. Импульс улучшается, но на сопротивлении 68,8k растёт кредитное плечо.');
+    const brief = analysis
+      ? `BTCUSDT: ${analysis.trend} тренд, RSI 14 ${analysis.rsi.toFixed(1)}, MACD ${analysis.histogram >= 0 ? 'положительный' : 'отрицательный'}. Поддержка ${formatPrice(analysis.support)}, сопротивление ${formatPrice(analysis.resistance)}.`
+      : 'Анализ BTCUSDT пока загружается из Binance.';
+    await navigator.clipboard?.writeText(brief);
     setBriefPinned(true);
   };
 
