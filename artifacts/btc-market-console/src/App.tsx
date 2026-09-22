@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   Activity,
@@ -59,40 +59,38 @@ type Asset = {
   note: string;
 };
 
+type ChartPoint = { label: string; value: number };
+type LiveMarket = {
+  price: number;
+  move: number;
+  high: number;
+  low: number;
+  quoteVolume: number;
+};
+type BinanceTicker = {
+  lastPrice: string;
+  priceChangePercent: string;
+  highPrice: string;
+  lowPrice: string;
+  quoteVolume: string;
+};
+type BinanceKline = [number, string, string, string, string, string, number];
+
+const BINANCE_API = 'https://api.binance.com/api/v3';
+const timeframeRequests: Record<Timeframe, { interval: string; limit: number }> = {
+  '1H': { interval: '5m', limit: 12 },
+  '4H': { interval: '15m', limit: 16 },
+  '1D': { interval: '1h', limit: 24 },
+  '1W': { interval: '4h', limit: 42 },
+};
+
 const watchlist: Asset[] = [
-  { symbol: 'BTC', name: 'Биткоин', price: '$67,842.18', move: '+2.84%', positive: true, tone: 'orange', note: 'Выше недельной области стоимости' },
+  { symbol: 'BTC', name: 'Биткоин', price: '—', move: '—', positive: true, tone: 'orange', note: 'Ожидание рыночного потока' },
   { symbol: 'ETH', name: 'Эфириум', price: '$3,492.60', move: '+1.19%', positive: true, tone: 'violet', note: 'Отстаёт от BTC; следим за сжатием ETH/BTC' },
   { symbol: 'SOL', name: 'Солана', price: '$182.14', move: '-0.64%', positive: false, tone: 'teal', note: 'Отбой от максимума прошлого диапазона' },
   { symbol: 'DXY', name: 'Индекс доллара', price: '104.21', move: '-0.18%', positive: false, tone: 'slate', note: 'Слабость доллара поддерживает риск' },
   { symbol: 'NDX', name: 'Nasdaq 100', price: '18,442.80', move: '+0.42%', positive: true, tone: 'blue', note: 'Ширина рынка улучшается к закрытию США' },
 ];
-
-const chartSets: Record<Timeframe, { label: string; value: number }[]> = {
-  '1H': [
-    { label: '09:00', value: 67240 }, { label: '09:10', value: 67310 }, { label: '09:20', value: 67285 },
-    { label: '09:30', value: 67490 }, { label: '09:40', value: 67425 }, { label: '09:50', value: 67580 },
-    { label: '10:00', value: 67620 }, { label: '10:10', value: 67540 }, { label: '10:20', value: 67720 },
-    { label: '10:30', value: 67842 },
-  ],
-  '4H': [
-    { label: '08:00', value: 65890 }, { label: '10:00', value: 66280 }, { label: '12:00', value: 66040 },
-    { label: '14:00', value: 66690 }, { label: '16:00', value: 66410 }, { label: '18:00', value: 67180 },
-    { label: '20:00', value: 66970 }, { label: '22:00', value: 67540 }, { label: '00:00', value: 67210 },
-    { label: '02:00', value: 67842 },
-  ],
-  '1D': [
-    { label: '17 мая', value: 64280 }, { label: '18 мая', value: 65140 }, { label: '19 мая', value: 64830 },
-    { label: '20 мая', value: 66020 }, { label: '21 мая', value: 65640 }, { label: '22 мая', value: 66980 },
-    { label: '23 мая', value: 66410 }, { label: '24 мая', value: 67580 }, { label: '25 мая', value: 67120 },
-    { label: '26 мая', value: 67842 },
-  ],
-  '1W': [
-    { label: '18 мар', value: 58420 }, { label: '25 мар', value: 61480 }, { label: '01 апр', value: 59840 },
-    { label: '08 апр', value: 67280 }, { label: '15 апр', value: 64390 }, { label: '22 апр', value: 65810 },
-    { label: '29 апр', value: 62940 }, { label: '06 мая', value: 68420 }, { label: '13 мая', value: 66110 },
-    { label: '20 мая', value: 67842 },
-  ],
-};
 
 const checks = [
   { id: 'structure', label: 'Структура рынка', detail: 'Повышающийся минимум сохраняется на 4H', status: 'Passed', time: '11 мин назад', score: '0.82' },
@@ -102,7 +100,17 @@ const checks = [
   { id: 'liquidations', label: 'Карта ликвидаций', detail: 'Кластер $18,4 млн сверху', status: 'Watch', time: '42 мин назад', score: '0.47' },
 ];
 
-const formatPrice = (value: number) => `$${value.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}`;
+const formatPrice = (value: number) => `$${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+const formatUsd = (value: number) => `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const formatCompactUsd = (value: number) => value >= 1_000_000_000
+  ? `$${(value / 1_000_000_000).toFixed(2)} млрд`
+  : `$${(value / 1_000_000).toFixed(0)} млн`;
+const formatChartLabel = (timestamp: number, timeframe: Timeframe) => new Intl.DateTimeFormat(
+  'ru-RU',
+  timeframe === '1D' || timeframe === '1W'
+    ? { day: '2-digit', month: 'short' }
+    : { hour: '2-digit', minute: '2-digit', hour12: false },
+).format(new Date(timestamp));
 const filterLabels: Record<ValidationFilter, string> = {
   'All checks': 'Все проверки',
   Passed: 'Пройдены',
@@ -114,6 +122,9 @@ function Home() {
   const [selectedSymbol, setSelectedSymbol] = useState('BTC');
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState('только что');
+  const [liveMarket, setLiveMarket] = useState<LiveMarket | null>(null);
+  const [chartData, setChartData] = useState<ChartPoint[]>([]);
+  const [marketError, setMarketError] = useState<string | null>(null);
   const [briefPinned, setBriefPinned] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -129,24 +140,71 @@ function Home() {
     return () => document.documentElement.classList.remove('dark');
   }, [isDark]);
 
-  const selectedAsset = watchlist.find((asset) => asset.symbol === selectedSymbol) ?? watchlist[0];
-  const chartData = chartSets[timeframe];
+  const liveWatchlist = useMemo(
+    () => watchlist.map((asset) => asset.symbol === 'BTC' && liveMarket
+      ? {
+          ...asset,
+          price: formatUsd(liveMarket.price),
+          move: `${liveMarket.move >= 0 ? '+' : ''}${liveMarket.move.toFixed(2)}%`,
+          positive: liveMarket.move >= 0,
+          note: 'Данные Binance · обновляется по запросу',
+        }
+      : asset),
+    [liveMarket],
+  );
+  const selectedAsset = liveWatchlist.find((asset) => asset.symbol === selectedSymbol) ?? liveWatchlist[0];
   const filteredWatchlist = useMemo(
-    () => watchlist.filter((asset) => `${asset.symbol} ${asset.name}`.toLowerCase().includes(search.toLowerCase())),
-    [search],
+    () => liveWatchlist.filter((asset) => `${asset.symbol} ${asset.name}`.toLowerCase().includes(search.toLowerCase())),
+    [liveWatchlist, search],
   );
   const filteredChecks = useMemo(
     () => checks.filter((check) => validationFilter === 'All checks' || check.status === validationFilter),
     [validationFilter],
   );
 
+  const loadMarket = useCallback(async (period: Timeframe) => {
+    setRefreshing(true);
+    setMarketError(null);
+    const request = timeframeRequests[period];
+    try {
+      const [tickerResponse, candlesResponse] = await Promise.all([
+        fetch(`${BINANCE_API}/ticker/24hr?symbol=BTCUSDT`),
+        fetch(`${BINANCE_API}/klines?symbol=BTCUSDT&interval=${request.interval}&limit=${request.limit}`),
+      ]);
+      if (!tickerResponse.ok || !candlesResponse.ok) {
+        throw new Error('Binance не вернул рыночные данные');
+      }
+      const ticker = await tickerResponse.json() as BinanceTicker;
+      const candles = await candlesResponse.json() as BinanceKline[];
+      if (!Array.isArray(candles) || candles.length === 0) {
+        throw new Error('Поток свечей BTC пуст');
+      }
+      setLiveMarket({
+        price: Number(ticker.lastPrice),
+        move: Number(ticker.priceChangePercent),
+        high: Number(ticker.highPrice),
+        low: Number(ticker.lowPrice),
+        quoteVolume: Number(ticker.quoteVolume),
+      });
+      setChartData(candles.map(([timestamp, , , , close]) => ({
+        label: formatChartLabel(timestamp, period),
+        value: Number(close),
+      })));
+      setLastRefresh(new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date()));
+    } catch (error) {
+      setMarketError(error instanceof Error ? error.message : 'Не удалось получить рыночные данные BTC');
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadMarket(timeframe);
+  }, [loadMarket, timeframe]);
+
   const refreshMarket = () => {
     if (refreshing) return;
-    setRefreshing(true);
-    window.setTimeout(() => {
-      setRefreshing(false);
-      setLastRefresh('только что');
-    }, 900);
+    void loadMarket(timeframe);
   };
 
   const copyBrief = async () => {
@@ -229,12 +287,12 @@ function Home() {
               <div className="flex items-center gap-3">
                 <button data-testid="button-open-mobile-nav" aria-label="Открыть навигацию" onClick={() => setMobileNavOpen(true)} className="rounded-lg border border-border bg-card p-2 text-muted-foreground hover:text-foreground md:hidden"><Menu size={19} /></button>
                 <div>
-                  <div className="data-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Вторник, 28 мая 2024 <span className="mx-1 text-primary">/</span> Сессия Нью-Йорка</div>
+                   <div className="data-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())} <span className="mx-1 text-primary">/</span> Сессия Нью-Йорка</div>
                   <h1 className="mt-1 text-xl font-semibold tracking-[-0.04em] sm:text-[22px]">Обзор рынка</h1>
                 </div>
               </div>
               <div className="flex items-center gap-2 sm:gap-3">
-                <div className="hidden items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground lg:flex"><Clock3 size={14} /><span className="data-mono">{lastRefresh === 'только что' ? '10:42:18' : lastRefresh}</span><span className="text-muted-foreground/60">UTC</span></div>
+                 <div className="hidden items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground lg:flex"><Clock3 size={14} /><span className="data-mono">{lastRefresh}</span><span className="text-muted-foreground/60">локальное время</span></div>
                 <button data-testid="button-refresh-market" aria-label="Обновить данные рынка" onClick={refreshMarket} className={`group flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium transition-all hover:border-primary/50 hover:text-primary ${refreshing ? 'text-primary' : ''}`}><RefreshCw size={15} className={refreshing ? 'animate-spin' : 'transition-transform group-hover:rotate-45'} /> <span className="hidden sm:block">{refreshing ? 'Синхронизация' : 'Обновить'}</span></button>
                 <button data-testid="button-toggle-notifications" aria-label="Открыть уведомления" onClick={() => setShowNotifications((value) => !value)} className={`relative rounded-lg border border-border bg-card p-2 text-muted-foreground transition-colors hover:text-foreground ${showNotifications ? 'text-primary' : ''}`}><Bell size={17} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-primary" /></button>
                 <button data-testid="button-toggle-theme" aria-label="Переключить тему" onClick={() => setIsDark((value) => !value)} className="hidden rounded-lg border border-border bg-card p-2 text-muted-foreground transition-colors hover:text-foreground sm:block">{isDark ? <Sparkles size={17} /> : <Moon size={17} />}</button>
@@ -270,13 +328,13 @@ function Home() {
                     <div className="flex items-center gap-2.5">
                       <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground"><Bitcoin size={18} strokeWidth={2.5} /></span>
                       <span className="data-mono text-xs font-semibold tracking-[0.08em]">BTC / USD</span>
-                       <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Рынок онлайн</span>
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${marketError ? 'bg-red-500/10 text-red-700 dark:text-red-300' : liveMarket ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'bg-primary/10 text-primary'}`}>{marketError ? 'Поток недоступен' : liveMarket ? 'Binance онлайн' : 'Подключение'}</span>
                     </div>
                     <div className="mt-4 flex items-baseline gap-3">
-                      <span data-testid="text-btc-price" className="data-mono text-[32px] font-semibold tracking-[-0.07em] sm:text-[42px]">{selectedSymbol === 'BTC' ? '$67,842.18' : selectedAsset.price}</span>
+                       <span data-testid="text-btc-price" className="data-mono text-[32px] font-semibold tracking-[-0.07em] sm:text-[42px]">{selectedSymbol === 'BTC' ? liveMarket ? formatUsd(liveMarket.price) : '—' : selectedAsset.price}</span>
                       <span data-testid="text-btc-move" className={`flex items-center gap-1 text-sm font-semibold ${selectedAsset.positive ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>{selectedAsset.positive ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}{selectedAsset.move}</span>
                     </div>
-                     <p className="mt-1 text-xs text-muted-foreground">Спотовый индекс <span className="mx-1 text-border">·</span> Диапазон за 24 ч <span className="data-mono font-medium text-foreground">$65 940 — $68 210</span></p>
+                      <p className="mt-1 text-xs text-muted-foreground">Спотовый индекс Binance <span className="mx-1 text-border">·</span> Диапазон за 24 ч <span className="data-mono font-medium text-foreground">{liveMarket ? `${formatPrice(liveMarket.low)} — ${formatPrice(liveMarket.high)}` : '—'}</span></p>
                   </div>
                   <div className="flex items-center gap-1 rounded-xl border border-border bg-card p-1">
                     {(['1H', '4H', '1D', '1W'] as Timeframe[]).map((period) => (
@@ -295,7 +353,8 @@ function Home() {
                     <button data-testid="button-chart-options" aria-label="Chart options" onClick={() => setShowMore((value) => !value)} className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><MoreHorizontal size={18} /></button>
                   </div>
                   <div className="relative h-[280px] w-full sm:h-[330px]">
-                     {refreshing ? <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-card/55 backdrop-blur-[2px]"><div className="data-mono rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground"><RefreshCw size={14} className="mr-2 inline animate-spin text-primary" />Обновляем рыночную картину</div></div> : null}
+                      {refreshing ? <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-card/55 backdrop-blur-[2px]"><div className="data-mono rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground"><RefreshCw size={14} className="mr-2 inline animate-spin text-primary" />Обновляем рыночную картину</div></div> : null}
+                      {!refreshing && chartData.length === 0 ? <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-card/70"><div className="max-w-xs text-center text-xs text-muted-foreground">{marketError ?? 'Ожидание свечей BTC'}</div></div> : null}
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                         <defs>
@@ -317,7 +376,7 @@ function Home() {
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border pt-4 sm:grid-cols-4">
                     {[
-                       ['Объём', '$1,84 млрд', '+12.4%', true],
+                        ['Объём', liveMarket ? formatCompactUsd(liveMarket.quoteVolume) : '—', '24 ч · Binance', true],
                        ['Волатильность', '43.8%', 'Повышенная', false],
                        ['Фандинг', '0.008%', 'Нейтральный', true],
                        ['Доминирование', '53.7%', '+0.31%', true],
@@ -351,7 +410,7 @@ function Home() {
                 <div className="panel mt-4 rounded-2xl p-5">
                    <div className="flex items-center justify-between"><div className="flex items-center gap-2 text-sm font-semibold"><Gauge size={16} className="text-primary" /> Панель риска</div><span className="data-mono text-[10px] text-muted-foreground">ОНЛАЙН</span></div>
                    <div className="mt-5 flex items-center gap-4"><div className="relative grid h-[76px] w-[76px] shrink-0 place-items-center rounded-full" style={{ background: 'conic-gradient(hsl(31 100% 50%) 0 62%, hsl(39 30% 91%) 62% 100%)' }}><div className="grid h-[60px] w-[60px] place-items-center rounded-full bg-card"><span className="data-mono text-xl font-semibold">62</span></div></div><div><div className="text-sm font-medium">Умеренный риск</div><p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">Запас сохраняется, но потенциал снижается выше локального максимума.</p></div></div>
-                   <div className="mt-5 grid grid-cols-2 gap-2"><div className="rounded-lg bg-muted/70 p-2.5"><div className="text-[10px] text-muted-foreground">Ближайшая поддержка</div><div className="data-mono mt-1 text-xs font-semibold">$66,9k</div></div><div className="rounded-lg bg-muted/70 p-2.5"><div className="text-[10px] text-muted-foreground">Ближайший риск</div><div className="data-mono mt-1 text-xs font-semibold">$68,8k</div></div></div>
+                    <div className="mt-5 grid grid-cols-2 gap-2"><div className="rounded-lg bg-muted/70 p-2.5"><div className="text-[10px] text-muted-foreground">Ближайшая поддержка</div><div className="data-mono mt-1 text-xs font-semibold">$66,9k</div></div><div className="rounded-lg bg-muted/70 p-2.5"><div className="text-[10px] text-muted-foreground">Ближайший риск</div><div className="data-mono mt-1 text-xs font-semibold">$68,8k</div></div></div>
                 </div>
               </aside>
             </section>
@@ -372,13 +431,13 @@ function Home() {
               <div className="panel overflow-hidden rounded-2xl">
                  <div className="hidden grid-cols-[1.35fr_1.65fr_.65fr_1fr_.55fr] gap-4 border-b border-border bg-muted/45 px-5 py-3 text-[10px] font-medium uppercase tracking-[0.13em] text-muted-foreground sm:grid"><span>Проверка</span><span>Результат</span><span>Оценка</span><span>Последний запуск</span><span>Статус</span></div>
                  {filteredChecks.length === 0 ? <div className="p-10 text-center text-sm text-muted-foreground">В этом представлении нет проверок.</div> : filteredChecks.map((check) => <div key={check.id} data-testid={`row-validation-${check.id}`} className="grid gap-2 border-b border-border px-4 py-4 last:border-0 hover:bg-muted/30 sm:grid-cols-[1.35fr_1.65fr_.65fr_1fr_.55fr] sm:items-center sm:gap-4 sm:px-5"><div className="flex items-center gap-2.5"><span className={`grid h-7 w-7 place-items-center rounded-lg ${check.status === 'Passed' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'bg-primary/12 text-primary'}`}>{check.status === 'Passed' ? <Check size={14} /> : <SlidersHorizontal size={14} />}</span><span className="text-xs font-semibold">{check.label}</span></div><div className="pl-9 text-[11px] text-muted-foreground sm:pl-0">{check.detail}</div><div className="data-mono pl-9 text-[11px] font-medium sm:pl-0">{check.score}</div><div className="data-mono pl-9 text-[10px] text-muted-foreground sm:pl-0">{check.time}</div><div className="pl-9 sm:pl-0"><span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-semibold ${check.status === 'Passed' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'bg-primary/12 text-primary'}`}><span className={`h-1.5 w-1.5 rounded-full ${check.status === 'Passed' ? 'bg-emerald-600' : 'bg-primary'}`} />{check.status === 'Passed' ? 'Пройдена' : 'Наблюдение'}</span></div></div>)}
-                 <div className="flex items-center justify-between border-t border-border bg-muted/25 px-5 py-3"><span className="data-mono text-[10px] text-muted-foreground">Проверки локальные · внешнего потока нет</span><button data-testid="button-run-validation" onClick={refreshMarket} className="flex items-center gap-1.5 text-[10px] font-medium text-primary hover:underline"><RefreshCw size={12} /> Запустить снова</button></div>
+                  <div className="flex items-center justify-between border-t border-border bg-muted/25 px-5 py-3"><span className="data-mono text-[10px] text-muted-foreground">{marketError ? 'Поток Binance недоступен · проверьте соединение' : 'BTC · Binance · обновление вручную'}</span><button data-testid="button-run-validation" onClick={refreshMarket} className="flex items-center gap-1.5 text-[10px] font-medium text-primary hover:underline"><RefreshCw size={12} /> Запустить снова</button></div>
               </div>
             </section>
 
             <footer className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5 text-[10px] text-muted-foreground">
               <span className="data-mono uppercase tracking-[0.14em]">Слой решений / v0.8.4</span>
-              <span className="flex items-center gap-2"><span className="h-1.5 w-1.5 rounded-full bg-emerald-600" /> Все системы в норме <span className="mx-1 text-border">·</span> Локальная рабочая область</span>
+              <span className="flex items-center gap-2"><span className={`h-1.5 w-1.5 rounded-full ${marketError ? 'bg-red-600' : liveMarket ? 'bg-emerald-600' : 'bg-primary'}`} /> {marketError ? 'Поток BTC требует внимания' : liveMarket ? 'Рынок BTC синхронизирован' : 'Подключение к Binance'} <span className="mx-1 text-border">·</span> Binance</span>
             </footer>
           </div>
         </main>
