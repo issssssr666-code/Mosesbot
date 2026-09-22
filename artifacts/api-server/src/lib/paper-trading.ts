@@ -1,10 +1,13 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, lte } from "drizzle-orm";
 import {
   db,
   paperAccountsTable,
+  paperAlertEventsTable,
+  paperAlertRecipientsTable,
   paperScenarioObservationsTable,
   paperTradesTable,
   type PaperAccount,
+  type PaperAlertEvent,
   type PaperTrade,
 } from "@workspace/db";
 import {
@@ -23,6 +26,25 @@ const SLIPPAGE_RATE = SLIPPAGE_BPS / 10_000;
 const MONITOR_INTERVAL_MS = 60_000;
 const TIMEFRAMES: BtcTimeframe[] = ["1H", "4H", "1D", "1W"];
 const EPSILON = 0.00000001;
+const ALERT_RETRY_DELAYS_MS = [5_000, 15_000, 60_000, 300_000];
+
+export type PaperAlertEventType = "TP1" | "TP2" | "SL" | "SCENARIO_CANCELLED";
+export type PaperAlertPayload = Record<string, number | string | null>;
+
+export type PaperAlertEventView = {
+  id: number;
+  tradeId: number;
+  eventType: PaperAlertEventType;
+  symbol: string;
+  timeframe: string;
+  direction: string;
+  scenario: string;
+  payload: PaperAlertPayload;
+  status: string;
+  attempts: number;
+  createdAt: string;
+  sentAt: string | null;
+};
 
 export type PaperTradeView = {
   id: number;
@@ -74,6 +96,21 @@ const numberValue = (value: string | number | null | undefined): number =>
   value == null ? 0 : Number(value);
 
 const fixed = (value: number): string => value.toFixed(8);
+
+const alertEventView = (event: PaperAlertEvent): PaperAlertEventView => ({
+  id: event.id,
+  tradeId: event.tradeId,
+  eventType: event.eventType as PaperAlertEventType,
+  symbol: event.symbol,
+  timeframe: event.timeframe,
+  direction: event.direction,
+  scenario: event.scenario,
+  payload: event.payload,
+  status: event.status,
+  attempts: event.attempts,
+  createdAt: event.createdAt.toISOString(),
+  sentAt: event.sentAt?.toISOString() ?? null,
+});
 
 const tradeView = (
   trade: PaperTrade,

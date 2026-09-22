@@ -1,5 +1,16 @@
 import { createInsertSchema } from "drizzle-zod";
-import { integer, jsonb, numeric, pgTable, serial, text, timestamp, uniqueIndex, boolean } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { z } from "zod/v4";
 
 export const paperAccountsTable = pgTable("paper_accounts", {
@@ -58,6 +69,45 @@ export const paperTradesTable = pgTable(
   }),
 );
 
+export const paperAlertRecipientsTable = pgTable("paper_alert_recipients", {
+  accountId: integer("account_id").primaryKey().references(() => paperAccountsTable.id),
+  chatId: text("chat_id").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const paperAlertEventsTable = pgTable(
+  "paper_alert_events",
+  {
+    id: serial("id").primaryKey(),
+    accountId: integer("account_id").notNull().references(() => paperAccountsTable.id),
+    tradeId: integer("trade_id").notNull().references(() => paperTradesTable.id),
+    eventType: text("event_type").notNull(),
+    symbol: text("symbol").notNull(),
+    timeframe: text("timeframe").notNull(),
+    direction: text("direction").notNull(),
+    scenario: text("scenario").notNull(),
+    payload: jsonb("payload")
+      .$type<Record<string, number | string | null>>()
+      .notNull(),
+    status: text("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    lastError: text("last_error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    eventIdentity: uniqueIndex("paper_alert_event_identity").on(
+      table.accountId,
+      table.tradeId,
+      table.eventType,
+    ),
+    pendingEvents: index("paper_alert_pending_events").on(table.status, table.nextAttemptAt),
+  }),
+);
+
 export const paperScenarioObservationsTable = pgTable(
   "paper_scenario_observations",
   {
@@ -91,12 +141,23 @@ export const insertPaperScenarioObservationSchema = createInsertSchema(
   id: true,
   observedAt: true,
 });
+export const insertPaperAlertRecipientSchema = createInsertSchema(
+  paperAlertRecipientsTable,
+);
+export const insertPaperAlertEventSchema = createInsertSchema(paperAlertEventsTable).omit({
+  id: true,
+  createdAt: true,
+});
 
 export type InsertPaperAccount = z.infer<typeof insertPaperAccountSchema>;
 export type InsertPaperTrade = z.infer<typeof insertPaperTradeSchema>;
 export type InsertPaperScenarioObservation = z.infer<
   typeof insertPaperScenarioObservationSchema
 >;
+export type InsertPaperAlertRecipient = z.infer<typeof insertPaperAlertRecipientSchema>;
+export type InsertPaperAlertEvent = z.infer<typeof insertPaperAlertEventSchema>;
 export type PaperAccount = typeof paperAccountsTable.$inferSelect;
 export type PaperTrade = typeof paperTradesTable.$inferSelect;
 export type PaperScenarioObservation = typeof paperScenarioObservationsTable.$inferSelect;
+export type PaperAlertRecipient = typeof paperAlertRecipientsTable.$inferSelect;
+export type PaperAlertEvent = typeof paperAlertEventsTable.$inferSelect;
