@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "gowpBBB_IWhIqBg0Fxx9F"
+uri = "file://screenshots/btc-market-console-live-btc.jpg"
+type = "image"
+title = "BTC Market Console — реальные данные BTC"
+description = "Скриншот русской консоли с текущей ценой BTC, диапазоном, объёмом и свечами из Binance."
+logical_id = "747d0d37-239f-47d3-8962-ed30e7ce0eec"
+content_hash = "sha256:eeb4fc6454f502a5ef3c8025ad67eb819496c63759d06d4726dc4742d7ce6592"
+size = 122041
+mtime_ms = 1790059373970
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:f9de5f6c-9e3b-4d79-8c5a-5a9ae87d6a64/747d0d37-239f-47d3-8962-ed30e7ce0eec/78f8f1dc-171a-4465-9d5b-0adfd46fc199"
+storage_version_token = "1790059407544455"
+content_type = "image/jpeg"
