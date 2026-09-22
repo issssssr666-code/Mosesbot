@@ -7,8 +7,12 @@ import {
   type BtcTimeframe,
 } from "./btc-market-analysis";
 import {
+  deliverPendingPaperAlerts,
+  getRecentPaperAlertEvents,
   getPaperAccountSnapshot,
+  registerPaperAlertRecipient,
   refreshPaperTrading,
+  type PaperAlertEventView,
   type PaperAccountSnapshot,
   type PaperTradeView,
 } from "./paper-trading";
@@ -87,6 +91,96 @@ const formatPnl = (value: number) => `${value >= 0 ? "+" : ""}${formatMoney(valu
 const formatQuantity = (value: number) =>
   `${value.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 8 })} BTC`;
 
+const alertNumber = (event: PaperAlertEventView, key: string): number =>
+  Number(event.payload[key] ?? 0);
+
+const alertText = (event: PaperAlertEventView, key: string): string =>
+  String(event.payload[key] ?? "—");
+
+const formatPaperAlertMessage = (event: PaperAlertEventView): string => {
+  const title = [
+    "Моисей | Paper Trading",
+    "",
+    `${event.symbol} ${event.timeframe} ${event.direction}`,
+    "",
+  ];
+  if (event.eventType === "TP1") {
+    return [
+      ...title,
+      "✅ TP1 достигнут",
+      "",
+      `Цена: ${formatPrice(alertNumber(event, "price"))}`,
+      `P&L: ${formatPnl(alertNumber(event, "tranchePnl"))}`,
+      `Закрыто: ${alertNumber(event, "closedPercent").toFixed(2)}%`,
+      `Осталось: ${formatQuantity(alertNumber(event, "remainingQuantity"))}`,
+      `Следующая цель: TP2 ${formatPrice(alertNumber(event, "takeProfit2"))}`,
+      `SL: ${formatPrice(alertNumber(event, "stopLoss"))}`,
+    ].join("\n");
+  }
+  if (event.eventType === "TP2") {
+    return [
+      ...title,
+      "✅ TP2 достигнут",
+      "",
+      `Цена закрытия: ${formatPrice(alertNumber(event, "closePrice"))}`,
+      `Итоговый P&L: ${formatPnl(alertNumber(event, "finalPnl"))}`,
+      `Изменение виртуального баланса: ${formatPnl(alertNumber(event, "balanceChange"))}`,
+      `Баланс: ${formatMoney(alertNumber(event, "balance"))}`,
+      `Результат: ${alertText(event, "result")}`,
+    ].join("\n");
+  }
+  if (event.eventType === "SL") {
+    return [
+      ...title,
+      "🛑 SL сработал",
+      "",
+      `Цена входа: ${formatPrice(alertNumber(event, "entryPrice"))}`,
+      `Цена закрытия: ${formatPrice(alertNumber(event, "closePrice"))}`,
+      `Убыток: ${formatPnl(alertNumber(event, "loss"))}`,
+      `Причина закрытия: ${alertText(event, "closeReason")}`,
+    ].join("\n");
+  }
+  return [
+    ...title,
+    "⚠️ Сценарий отменён",
+    "",
+    `Был сценарий: ${event.payload.previousScenario ?? event.scenario}`,
+    `Новый сценарий: ${alertText(event, "newScenario")}`,
+    `Причина: ${alertText(event, "cancellationReason")}`,
+    `Новая закрытая свеча: ${alertText(event, "newClosedCandleTime")}`,
+    `Результат позиции: ${formatPnl(alertNumber(event, "positionResult"))}`,
+  ].join("\n");
+};
+
+const alertTypeLabel: Record<PaperAlertEventView["eventType"], string> = {
+  TP1: "TP1",
+  TP2: "TP2",
+  SL: "SL",
+  SCENARIO_CANCELLED: "отмена сценария",
+};
+
+const formatPaperAlerts = (events: PaperAlertEventView[]): string =>
+  [
+    "TEST TRADING · последние уведомления",
+    events.length > 0
+      ? events
+          .map((event) => {
+            const delivery =
+              event.status === "sent"
+                ? "отправлено"
+                : `ожидает отправки, попыток: ${event.attempts}`;
+            const pnl =
+              event.eventType === "TP1"
+                ? alertNumber(event, "tranchePnl")
+                : event.eventType === "SCENARIO_CANCELLED"
+                  ? alertNumber(event, "positionResult")
+                  : alertNumber(event, event.eventType === "TP2" ? "finalPnl" : "loss");
+            return `#${event.id} · ${alertTypeLabel[event.eventType]} · ${event.symbol} ${event.timeframe} ${event.direction} · P&L ${formatPnl(pnl)} · ${delivery}`;
+          })
+          .join("\n")
+      : "Событий пока нет.",
+  ].join("\n");
+
 const timeframeLabel: Record<BtcTimeframe, string> = {
   "1H": "1H",
   "4H": "4H",
@@ -110,6 +204,7 @@ const helpText = [
   "/paper monitor — баланс, equity, P&L и детали позиций",
   "/paper trades — последние тестовые сделки",
   "/paper stats — статистика тестовой торговли",
+  "/paper alerts — последние уведомления TEST TRADING",
 ].join("\n");
 
 const formatPaperPosition = (trade: PaperTradeView): string =>
@@ -295,6 +390,14 @@ const parseCommand = (text: string): { command: string; argument?: string } => {
 const handleMessage = async (token: string, message: TelegramMessage): Promise<void> => {
   if (!message.text) return;
   const { command, argument } = parseCommand(message.text);
+  try {
+    await registerPaperAlertRecipient(message.chat.id);
+    void deliverPendingPaperAlerts((chatId, event) =>
+      sendMessage(token, chatId, formatPaperAlertMessage(event)),
+    );
+  } catch (error) {
+    logger.warn({ error }, "Could not register Telegram paper alert recipient");
+  }
 
   if (command === "/start" || command === "/help") {
     await sendMessage(token, message.chat.id, helpText);
@@ -302,26 +405,32 @@ const handleMessage = async (token: string, message: TelegramMessage): Promise<v
   }
   if (command === "/paper") {
     const subcommand = argument?.toLowerCase() ?? "status";
-    if (!["status", "monitor", "trades", "stats"].includes(subcommand)) {
+    if (!["status", "monitor", "trades", "stats", "alerts"].includes(subcommand)) {
       await sendMessage(
         token,
         message.chat.id,
-        "Используйте /paper, /paper status, /paper monitor, /paper trades или /paper stats.",
+        "Используйте /paper, /paper status, /paper monitor, /paper trades, /paper stats или /paper alerts.",
       );
       return;
     }
     try {
       await refreshPaperTrading();
-      const snapshot = await getPaperAccountSnapshot();
       const response =
-        subcommand === "trades"
-          ? formatPaperTrades(snapshot)
-          : subcommand === "monitor"
-            ? formatPaperMonitor(snapshot)
-            : subcommand === "stats"
-              ? formatPaperStats(snapshot)
-              : formatPaperStatus(snapshot);
-      await sendMessage(token, message.chat.id, response);
+        subcommand === "alerts"
+          ? formatPaperAlerts(await getRecentPaperAlertEvents())
+          : (() => {
+              const snapshotPromise = getPaperAccountSnapshot();
+              return snapshotPromise.then((snapshot) =>
+                subcommand === "trades"
+                  ? formatPaperTrades(snapshot)
+                  : subcommand === "monitor"
+                    ? formatPaperMonitor(snapshot)
+                    : subcommand === "stats"
+                      ? formatPaperStats(snapshot)
+                      : formatPaperStatus(snapshot),
+              );
+            })();
+      await sendMessage(token, message.chat.id, await response);
     } catch (error) {
       logger.warn({ error }, "Telegram paper trading command failed");
       await sendMessage(
@@ -374,6 +483,15 @@ export const startTelegramBot = (): (() => void) => {
   const controller = new AbortController();
   let stopped = false;
   let offset = 0;
+  const retryPaperAlerts = () => {
+    void deliverPendingPaperAlerts((chatId, event) =>
+      sendMessage(token, chatId, formatPaperAlertMessage(event)),
+    ).catch((error) => {
+      logger.warn({ error }, "Paper alert retry loop failed");
+    });
+  };
+  const alertRetryInterval = setInterval(retryPaperAlerts, 15_000);
+  retryPaperAlerts();
 
   const poll = async (): Promise<void> => {
     logger.info("Telegram bot polling started");
@@ -405,6 +523,7 @@ export const startTelegramBot = (): (() => void) => {
   return () => {
     stopped = true;
     controller.abort();
+    clearInterval(alertRetryInterval);
     logger.info("Telegram bot polling stopped");
   };
 };
