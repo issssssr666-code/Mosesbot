@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "BTC Market Console"
+description = "A focused Bitcoin market analysis console for reviewing price action, market signals, risk context, and recent validation checks in one place."
+version = "1.0.0"
+id = "artifacts/btc-market-console"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22111
+
+[services.development]
+run = "pnpm --filter @workspace/btc-market-console run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/btc-market-console", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/btc-market-console/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22111"
+BASE_PATH = "/"
