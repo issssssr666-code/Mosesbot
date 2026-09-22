@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startPaperTrading } from "./lib/paper-trading";
 import { startTelegramBot } from "./lib/telegram-bot";
 
 const rawPort = process.env["PORT"];
@@ -21,9 +22,11 @@ const server = app.listen(port, () => {
 });
 
 const stopTelegramBot = startTelegramBot();
+const stopPaperTrading = startPaperTrading();
 const shutdown = (signal: string) => {
   logger.info({ signal }, "Server shutdown requested");
   stopTelegramBot();
+  stopPaperTrading();
   server.close(() => process.exit(0));
 };
 
