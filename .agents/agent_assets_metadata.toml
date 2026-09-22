@@ -56,3 +56,17 @@ mtime_ms = 1790060413157
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:f9de5f6c-9e3b-4d79-8c5a-5a9ae87d6a64/93ab6196-f19b-4029-a517-60477abe2ffd/6ac2526c-cb77-4ad2-bb36-9ae2c69ee267"
 storage_version_token = "1790060421087843"
 content_type = "image/jpeg"
+
+[[outputs]]
+id = "og2jJs5GI7ABRW6Q94D-m"
+uri = "file://screenshots/btc-market-console-moses-analysis.jpg"
+type = "image"
+title = "BTC Market Console — прозрачный Анализ Моисея"
+description = "Скриншот консоли с отдельными секциями Тренд, Импульс, Объём, Ключевые уровни и Сценарий, включая причины и реальные значения Binance."
+logical_id = "4001f7cd-2323-4e1a-b20f-94051e53f2ef"
+content_hash = "sha256:8c76f52c1c60368deadd73a81c3d44a5fd05fa3264cbe1d0a36be9dffdb8d869"
+size = 163672
+mtime_ms = 1790060689617
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:f9de5f6c-9e3b-4d79-8c5a-5a9ae87d6a64/4001f7cd-2323-4e1a-b20f-94051e53f2ef/ac9a4c0e-449e-4c49-bd20-e9d11bc5c647"
+storage_version_token = "1790060705691312"
+content_type = "image/jpeg"
