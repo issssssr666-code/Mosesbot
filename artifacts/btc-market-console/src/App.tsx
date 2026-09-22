@@ -450,7 +450,7 @@ function Home() {
                       <div>
                         <div className="text-xs font-medium">Обновлён кластер сопротивления</div>
                         <div className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                          На уровне 68,8k находится $18,4 млн встречной ликвидности.
+                           {analysis ? `Сопротивление ${formatPrice(analysis.resistance)} рассчитано по максимумам последних 50 свечей.` : 'Ждём подтверждения уровней по свечам Binance.'}
                         </div>
                       </div>
                     </div>
@@ -488,6 +488,7 @@ function Home() {
                     <div className="flex items-center gap-4 text-xs">
                        <span className="flex items-center gap-2 font-medium"><span className="h-2 w-2 rounded-full bg-primary" />Цена</span>
                        <span className="hidden items-center gap-2 text-muted-foreground sm:flex"><span className="h-2 w-2 rounded-full bg-emerald-600" />EMA 21</span>
+                       <span className="hidden items-center gap-2 text-muted-foreground sm:flex"><span className="h-2 w-2 rounded-full bg-sky-600" />EMA 50</span>
                        <button data-testid="button-toggle-levels" onClick={() => setShowLevels((value) => !value)} className={`hidden items-center gap-2 transition-colors sm:flex ${showLevels ? 'text-muted-foreground' : 'text-muted-foreground/40'}`}><span className="h-2 w-2 rounded-full border border-dashed border-muted-foreground" />Ключевые уровни</button>
                     </div>
                     <button data-testid="button-chart-options" aria-label="Chart options" onClick={() => setShowMore((value) => !value)} className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><MoreHorizontal size={18} /></button>
@@ -506,10 +507,12 @@ function Home() {
                         <CartesianGrid stroke="hsl(37 20% 84% / 0.7)" vertical={false} />
                         <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: 'hsl(222 13% 43%)', fontSize: 10, fontFamily: 'IBM Plex Mono' }} dy={10} />
                         <YAxis domain={['dataMin - 500', 'dataMax + 500']} axisLine={false} tickLine={false} tick={{ fill: 'hsl(222 13% 43%)', fontSize: 10, fontFamily: 'IBM Plex Mono' }} tickFormatter={(value) => `${Math.round(value / 1000)}k`} orientation="right" />
-                         {showLevels && <ReferenceLine y={66900} stroke="hsl(162 44% 34% / 0.65)" strokeDasharray="4 4" label={{ value: 'НИЖНЯЯ ГРАНИЦА 66,9k', position: 'insideTopLeft', fill: 'hsl(162 44% 34%)', fontSize: 9, fontFamily: 'IBM Plex Mono' }} />}
-                         {showLevels && <ReferenceLine y={68800} stroke="hsl(4 69% 51% / 0.65)" strokeDasharray="4 4" label={{ value: 'СОПРОТИВЛЕНИЕ 68,8k', position: 'insideTopLeft', fill: 'hsl(4 69% 51%)', fontSize: 9, fontFamily: 'IBM Plex Mono' }} />}
+                         {showLevels && analysis && <ReferenceLine y={analysis.support} stroke="hsl(162 44% 34% / 0.65)" strokeDasharray="4 4" label={{ value: `ПОДДЕРЖКА ${formatPrice(analysis.support)}`, position: 'insideTopLeft', fill: 'hsl(162 44% 34%)', fontSize: 9, fontFamily: 'IBM Plex Mono' }} />}
+                         {showLevels && analysis && <ReferenceLine y={analysis.resistance} stroke="hsl(4 69% 51% / 0.65)" strokeDasharray="4 4" label={{ value: `СОПРОТИВЛЕНИЕ ${formatPrice(analysis.resistance)}`, position: 'insideTopLeft', fill: 'hsl(4 69% 51%)', fontSize: 9, fontFamily: 'IBM Plex Mono' }} />}
                         <Tooltip content={({ active, payload, label }) => active && payload?.length ? <div className="rounded-lg border border-border bg-card px-3 py-2 shadow-xl"><div className="data-mono text-[10px] text-muted-foreground">{label}</div><div className="data-mono mt-1 text-sm font-semibold">{formatPrice(Number(payload[0].value))}</div></div> : null} />
                         <Area type="monotone" dataKey="value" stroke="hsl(31 100% 50%)" strokeWidth={2.5} fill="url(#priceFill)" activeDot={{ r: 4, fill: 'hsl(31 100% 50%)', stroke: 'hsl(42 40% 98%)', strokeWidth: 2 }} />
+                         <Line type="monotone" dataKey="ema21" stroke="hsl(162 44% 34%)" strokeWidth={1.5} dot={false} connectNulls />
+                         <Line type="monotone" dataKey="ema50" stroke="hsl(205 75% 45%)" strokeWidth={1.5} dot={false} connectNulls />
                       </AreaChart>
                     </ResponsiveContainer>
                      {showMore && <div className="absolute right-3 top-9 z-10 w-40 rounded-lg border border-border bg-card p-1.5 shadow-xl"><button data-testid="button-reset-chart" onClick={() => setShowLevels(true)} className="flex w-full items-center rounded-md px-2.5 py-2 text-left text-xs hover:bg-muted">Сбросить уровни</button><button data-testid="button-copy-chart" onClick={copyBrief} className="flex w-full items-center rounded-md px-2.5 py-2 text-left text-xs hover:bg-muted">Скопировать снимок</button></div>}
@@ -534,14 +537,14 @@ function Home() {
                     </div>
                     <div className="mt-7 flex items-center gap-3">
                       <div className="grid h-12 w-12 place-items-center rounded-xl border border-primary/30 bg-primary/15 text-primary"><TrendingUp size={22} /></div>
-                       <div><div className="data-mono text-[10px] uppercase tracking-[0.18em] text-secondary-foreground/45">Текущая позиция</div><div className="mt-1 text-xl font-semibold tracking-[-0.04em]">Конструктивная</div></div>
+                        <div><div className="data-mono text-[10px] uppercase tracking-[0.18em] text-secondary-foreground/45">Текущая позиция</div><div className="mt-1 text-xl font-semibold tracking-[-0.04em]">{analysis?.trend ?? 'Загрузка'}</div></div>
                     </div>
-                     <p className="mt-6 text-[13px] leading-[1.7] text-secondary-foreground/72">Цена закрепляется выше предыдущей области стоимости, а движение возглавляет спот. Поток здоровый, но следующая точка решения — <span className="font-semibold text-primary">$68,8k</span>, где начинает скапливаться встречная ликвидность.</p>
+                      <p className="mt-6 text-[13px] leading-[1.7] text-secondary-foreground/72">{analysis ? <>Цена <span className="font-semibold text-primary">{liveMarket ? formatPrice(liveMarket.price) : 'BTCUSDT'}</span> оценивается относительно EMA 21/50. Точка решения — <span className="font-semibold text-primary">{formatPrice(analysis.resistance)}</span>, а рабочая поддержка — <span className="font-semibold text-primary">{formatPrice(analysis.support)}</span>.</> : 'Получаем свечи Binance для расчёта технических показателей.'}</p>
                     <div className="mt-6 space-y-3">
                       {[
-                         ['Сценарий', 'Рост выше $66,9k', 'good'],
-                         ['Уверенность', '7.4 / 10', 'good'],
-                         ['Риск', 'Скопление у сопротивления', 'warn'],
+                          ['Сценарий', analysis ? `${analysis.trend} · RSI ${analysis.rsi.toFixed(1)}` : 'Ожидание данных', 'good'],
+                          ['MACD', analysis ? `${analysis.histogram >= 0 ? 'Положительный' : 'Отрицательный'} · ${analysis.macd.toFixed(2)}` : 'Ожидание данных', analysis && analysis.histogram < 0 ? 'warn' : 'good'],
+                          ['Риск', analysis ? `Зона ${formatPrice(analysis.support)}–${formatPrice(analysis.resistance)}` : 'Расчёт уровней', 'warn'],
                       ].map(([label, value, tone]) => <div key={String(label)} className="flex items-center justify-between border-b border-secondary-foreground/10 pb-3 text-xs last:border-0 last:pb-0"><span className="text-secondary-foreground/45">{String(label)}</span><span className={`flex items-center gap-1.5 font-medium ${tone === 'warn' ? 'text-primary' : 'text-secondary-foreground/90'}`}><span className={`h-1.5 w-1.5 rounded-full ${tone === 'warn' ? 'bg-primary' : 'bg-emerald-400'}`} />{String(value)}</span></div>)}
                     </div>
                      <button data-testid="button-copy-brief" onClick={copyBrief} className="mt-7 flex w-full items-center justify-center gap-2 rounded-lg border border-secondary-foreground/15 bg-secondary-foreground/5 py-2.5 text-xs font-medium transition-colors hover:bg-primary hover:text-primary-foreground hover:border-primary"><BookOpen size={14} /> {briefPinned ? 'Сводка скопирована' : 'Скопировать сводку'}</button>
@@ -550,8 +553,29 @@ function Home() {
                 <div className="panel mt-4 rounded-2xl p-5">
                    <div className="flex items-center justify-between"><div className="flex items-center gap-2 text-sm font-semibold"><Gauge size={16} className="text-primary" /> Панель риска</div><span className="data-mono text-[10px] text-muted-foreground">ОНЛАЙН</span></div>
                    <div className="mt-5 flex items-center gap-4"><div className="relative grid h-[76px] w-[76px] shrink-0 place-items-center rounded-full" style={{ background: 'conic-gradient(hsl(31 100% 50%) 0 62%, hsl(39 30% 91%) 62% 100%)' }}><div className="grid h-[60px] w-[60px] place-items-center rounded-full bg-card"><span className="data-mono text-xl font-semibold">62</span></div></div><div><div className="text-sm font-medium">Умеренный риск</div><p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">Запас сохраняется, но потенциал снижается выше локального максимума.</p></div></div>
-                    <div className="mt-5 grid grid-cols-2 gap-2"><div className="rounded-lg bg-muted/70 p-2.5"><div className="text-[10px] text-muted-foreground">Ближайшая поддержка</div><div className="data-mono mt-1 text-xs font-semibold">$66,9k</div></div><div className="rounded-lg bg-muted/70 p-2.5"><div className="text-[10px] text-muted-foreground">Ближайший риск</div><div className="data-mono mt-1 text-xs font-semibold">$68,8k</div></div></div>
+                    <div className="mt-5 grid grid-cols-2 gap-2"><div className="rounded-lg bg-muted/70 p-2.5"><div className="text-[10px] text-muted-foreground">Ближайшая поддержка</div><div className="data-mono mt-1 text-xs font-semibold">{analysis ? formatPrice(analysis.support) : '—'}</div></div><div className="rounded-lg bg-muted/70 p-2.5"><div className="text-[10px] text-muted-foreground">Ближайшее сопротивление</div><div className="data-mono mt-1 text-xs font-semibold">{analysis ? formatPrice(analysis.resistance) : '—'}</div></div></div>
                 </div>
+                 <div className="panel mt-4 rounded-2xl p-5">
+                   <div className="flex items-center justify-between">
+                     <div className="flex items-center gap-2 text-sm font-semibold"><Activity size={16} className="text-primary" /> Анализ Моисея</div>
+                     <span className="data-mono text-[10px] text-muted-foreground">{timeframe} · Binance</span>
+                   </div>
+                   {analysis ? (
+                     <>
+                       <p className="mt-4 text-[12px] leading-relaxed text-muted-foreground">{analysis.summary}</p>
+                       <div className="mt-4 grid grid-cols-2 gap-2">
+                         {[
+                           ['EMA 21', formatPrice(analysis.ema21)],
+                           ['EMA 50', formatPrice(analysis.ema50)],
+                           ['RSI 14', analysis.rsi.toFixed(1)],
+                           ['Объём свечи', formatCompactBtc(analysis.volume)],
+                           ['MACD', analysis.macd.toFixed(2)],
+                           ['Сигнал', analysis.signal.toFixed(2)],
+                         ].map(([label, value]) => <div key={label} className="rounded-lg bg-muted/70 p-2.5"><div className="text-[10px] text-muted-foreground">{label}</div><div className="data-mono mt-1 text-xs font-semibold">{value}</div></div>)}
+                       </div>
+                     </>
+                   ) : <div className="mt-4 rounded-lg bg-muted/70 p-3 text-[11px] text-muted-foreground">{marketError ?? 'Индикаторы появятся после загрузки истории свечей.'}</div>}
+                 </div>
               </aside>
             </section>
 
