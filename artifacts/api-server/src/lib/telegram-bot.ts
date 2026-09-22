@@ -33,9 +33,12 @@ const telegramRequest = async <T>(
   token: string,
   method: string,
   body: Record<string, unknown>,
+  parentSignal?: AbortSignal,
 ): Promise<T> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const abortFromParent = () => controller.abort();
+  parentSignal?.addEventListener("abort", abortFromParent, { once: true });
   try {
     const response = await fetch(`${TELEGRAM_API}${token}/${method}`, {
       method: "POST",
@@ -58,6 +61,7 @@ const telegramRequest = async <T>(
     throw new TelegramApiError("Не удалось связаться с Telegram API");
   } finally {
     clearTimeout(timeout);
+    parentSignal?.removeEventListener("abort", abortFromParent);
   }
 };
 
@@ -184,7 +188,7 @@ export const startTelegramBot = (): (() => void) => {
           offset,
           timeout: POLL_TIMEOUT_SECONDS,
           allowed_updates: ["message"],
-        });
+        }, controller.signal);
         for (const update of updates) {
           offset = Math.max(offset, update.update_id + 1);
           if (update.message) {
