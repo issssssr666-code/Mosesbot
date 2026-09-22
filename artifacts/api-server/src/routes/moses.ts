@@ -5,6 +5,7 @@ import {
   isBtcTimeframe,
   type BtcTimeframe,
 } from "../lib/btc-market-analysis";
+import { getMosesContext } from "../lib/market-sentiment";
 
 const router: IRouter = Router();
 
@@ -36,6 +37,30 @@ router.get("/moses/btc-analysis", async (req, res): Promise<void> => {
     req.log.error({ timeframe, error }, "Unexpected BTC analysis error");
     res.status(500).json({
       error: "Внутренняя ошибка расчёта BTC-анализа",
+      timeframe,
+    });
+  }
+});
+
+router.get("/moses/market-context", async (req, res): Promise<void> => {
+  const rawTimeframe = req.query.timeframe;
+  const timeframe =
+    typeof rawTimeframe === "string" ? rawTimeframe.toUpperCase() : "4H";
+  if (!isBtcTimeframe(timeframe)) {
+    res.status(400).json({
+      error: "Неверный timeframe. Используйте 1H, 4H, 1D или 1W.",
+    });
+    return;
+  }
+  try {
+    res.json(await getMosesContext(timeframe as BtcTimeframe));
+  } catch (error) {
+    req.log.warn(
+      { timeframe, error: error instanceof Error ? error.message : error },
+      "Moses market context failed",
+    );
+    res.status(502).json({
+      error: error instanceof Error ? error.message : "Не удалось собрать рыночный фон.",
       timeframe,
     });
   }
