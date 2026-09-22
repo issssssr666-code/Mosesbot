@@ -236,6 +236,12 @@ const helpText = [
   "/paper alerts — последние уведомления TEST TRADING",
   "/paper journal — последние закрытые сделки с анализом",
   "/paper lessons — накопленные выводы Моисея",
+  "",
+  "BACKTEST без изменения TEST TRADING:",
+  "/backtest — тест за последние 180 дней на 4H",
+  "/backtest 4h — исторический тест на 4H",
+  "/backtest 1d — исторический тест на 1D",
+  "/backtest stats — последние сохранённые отчёты",
 ].join("\n");
 
 const formatPaperPosition = (trade: PaperTradeView): string =>
@@ -565,6 +571,54 @@ const handleMessage = async (token: string, message: TelegramMessage): Promise<v
         token,
         message.chat.id,
         `Не удалось обновить TEST TRADING: ${error instanceof Error ? error.message : "внутренняя ошибка"}. Попробуйте ещё раз.`,
+      );
+    }
+    return;
+  }
+  if (command === "/backtest") {
+    const backtestArgument = argument?.toLowerCase() ?? "4h";
+    if (backtestArgument === "stats") {
+      try {
+        await sendMessage(token, message.chat.id, formatBacktestStats(await getRecentBacktestReports()));
+      } catch (error) {
+        logger.warn({ error }, "Telegram backtest stats command failed");
+        await sendMessage(
+          token,
+          message.chat.id,
+          "Не удалось прочитать сохранённые отчёты backtest. Попробуйте ещё раз.",
+        );
+      }
+      return;
+    }
+
+    const timeframe =
+      backtestArgument === "4h" ? "4H" : backtestArgument === "1d" ? "1D" : null;
+    if (!timeframe) {
+      await sendMessage(
+        token,
+        message.chat.id,
+        "Используйте /backtest, /backtest 4h, /backtest 1d или /backtest stats.",
+      );
+      return;
+    }
+    try {
+      await sendMessage(
+        token,
+        message.chat.id,
+        formatBacktestReport(await runBacktest(timeframe)),
+      );
+    } catch (error) {
+      const reason =
+        error instanceof BtcMarketDataError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "внутренняя ошибка backtest";
+      logger.warn({ timeframe, reason }, "Telegram backtest command failed");
+      await sendMessage(
+        token,
+        message.chat.id,
+        `Не удалось выполнить backtest: ${reason}. Исторические данные и TEST TRADING не изменены.`,
       );
     }
     return;
