@@ -25,6 +25,14 @@ import {
   runBacktest,
   type BacktestReport,
 } from "./backtesting";
+import {
+  getCurrentMarketSentiment,
+  getMosesContext,
+  refreshMarketNews,
+  type MarketContext,
+  type MarketNewsItem,
+  type MarketSentiment,
+} from "./market-sentiment";
 
 type TelegramMessage = {
   chat: { id: number };
@@ -227,6 +235,11 @@ const helpText = [
   "/btc 1d — дневной анализ",
   "/btc 1w — недельный анализ",
   "",
+  "РЫНОЧНЫЙ ФОН:",
+  "/news — последние важные новости",
+  "/sentiment — текущее настроение рынка",
+  "/moses context — полный технический и фундаментальный контекст",
+  "",
   "TEST TRADING без реальных ордеров:",
   "/paper — состояние виртуального счёта",
   "/paper status — баланс и открытые позиции",
@@ -415,7 +428,93 @@ const formatBacktestStats = (reports: BacktestReport[]): string =>
       : "Сохранённых запусков пока нет. Выполните /backtest или /backtest 4h.",
   ].join("\n");
 
-const formatAnalysis = (data: BtcMarketAnalysis): string => {
+const sentimentLabel = (value: MarketSentiment["label"]): string =>
+  value === "positive" ? "Позитивное" : value === "negative" ? "Негативное" : "Нейтральное";
+
+const directionLabel = (value: MarketNewsItem["impactDirection"]): string =>
+  value === "positive" ? "позитивное" : value === "negative" ? "негативное" : "нейтральное";
+
+const formatNewsItem = (item: MarketNewsItem): string =>
+  [
+    `• ${item.title}`,
+    `  ${item.source} · ${item.publishedAt} · влияние: ${item.impactScore.toFixed(0)}/100, ${directionLabel(item.impactDirection)}`,
+    `  ${item.summary}`,
+  ].join("\n");
+
+const formatNews = (
+  news: MarketNewsItem[],
+  sourceStatus: { source: string; ok: boolean; error?: string }[],
+): string =>
+  [
+    "МОИСЕЙ · последние важные новости",
+    "",
+    news.length > 0 ? news.slice(0, 5).map(formatNewsItem).join("\n\n") : "Свежих новостей нет.",
+    "",
+    `Источники: ${sourceStatus.filter((source) => source.ok).length}/${sourceStatus.length} доступны.`,
+  ].join("\n");
+
+const formatMarketBackground = (sentiment: MarketSentiment | null, alignment?: string): string =>
+  [
+    "8) Рыночный фон",
+    ...(sentiment
+      ? [
+          `Настроение рынка: ${sentimentLabel(sentiment.label)}`,
+          `Sentiment Score: ${sentiment.score >= 0 ? "+" : ""}${sentiment.score}`,
+          `Новостей за последние ${sentiment.lookbackHours} ч: ${sentiment.newsCount} · позитивных ${sentiment.positiveCount} · нейтральных ${sentiment.neutralCount} · негативных ${sentiment.negativeCount}`,
+          "Главные события:",
+          sentiment.topNews.length > 0
+            ? sentiment.topNews
+                .slice(0, 3)
+                .map(
+                  (item) =>
+                    `• ${item.title} (${item.source}, влияние ${item.impactScore.toFixed(0)}/100)`,
+                )
+                .join("\n")
+            : "• Нет доступных событий.",
+          "Возможные риски:",
+          ...sentiment.risks.slice(0, 4).map((risk) => `• ${risk}`),
+          alignment ? `Согласованность с техникой: ${alignment}` : "",
+          "Sentiment Score — контекст, а не самостоятельный торговый сигнал.",
+        ]
+      : [
+          "Настроение рынка: данные недоступны.",
+          "Новостной фон не использован как торговый сигнал.",
+        ]),
+  ].filter(Boolean).join("\n");
+
+const formatSentiment = (sentiment: MarketSentiment): string =>
+  [
+    "МОИСЕЙ · настроение рынка BTCUSDT",
+    "",
+    `Настроение: ${sentimentLabel(sentiment.label)}`,
+    `Sentiment Score: ${sentiment.score >= 0 ? "+" : ""}${sentiment.score}`,
+    `Период: последние ${sentiment.lookbackHours} ч`,
+    `Новости: ${sentiment.newsCount} · позитивные ${sentiment.positiveCount} · нейтральные ${sentiment.neutralCount} · негативные ${sentiment.negativeCount}`,
+    "",
+    "Главные события:",
+    sentiment.topNews.length > 0
+      ? sentiment.topNews.map(formatNewsItem).join("\n\n")
+      : "Событий нет.",
+    "",
+    "Возможные риски:",
+    ...sentiment.risks.map((risk) => `• ${risk}`),
+    "",
+    "Оценка настроения используется только как фундаментальный контекст и не открывает сделки.",
+  ].join("\n");
+
+const formatMosesContext = (context: MarketContext): string =>
+  [
+    "МОИСЕЙ · полный контекст BTCUSDT",
+    "",
+    formatAnalysis(context.technical, context.sentiment),
+    "",
+    `Итог согласованности: ${context.alignment}`,
+  ].join("\n");
+
+const formatAnalysis = (
+  data: BtcMarketAnalysis,
+  sentiment: MarketSentiment | null = null,
+): string => {
   const { price } = data.market;
   const { ema21, ema50, rsi14, macd, signal, histogram, candleVolume, averageVolume20, volumeRatio20 } =
     data.indicators;
@@ -495,6 +594,8 @@ const formatAnalysis = (data: BtcMarketAnalysis): string => {
     "",
     "7) Анализ Моисея",
     mosesExplanation,
+    "",
+    formatMarketBackground(sentiment),
   ].join("\n");
 };
 
@@ -623,6 +724,54 @@ const handleMessage = async (token: string, message: TelegramMessage): Promise<v
     }
     return;
   }
+  if (command === "/news") {
+    try {
+      const result = await refreshMarketNews();
+      await sendMessage(token, message.chat.id, formatNews(result.news, result.sourceStatus));
+    } catch (error) {
+      logger.warn({ error }, "Telegram news command failed");
+      await sendMessage(
+        token,
+        message.chat.id,
+        `Не удалось обновить новости: ${error instanceof Error ? error.message : "внутренняя ошибка"}. Существующая торговая логика не изменена.`,
+      );
+    }
+    return;
+  }
+  if (command === "/sentiment") {
+    try {
+      await sendMessage(
+        token,
+        message.chat.id,
+        formatSentiment(await getCurrentMarketSentiment()),
+      );
+    } catch (error) {
+      logger.warn({ error }, "Telegram sentiment command failed");
+      await sendMessage(
+        token,
+        message.chat.id,
+        `Не удалось рассчитать настроение рынка: ${error instanceof Error ? error.message : "внутренняя ошибка"}.`,
+      );
+    }
+    return;
+  }
+  if (command === "/moses") {
+    if (argument?.toLowerCase() !== "context") {
+      await sendMessage(token, message.chat.id, "Используйте /moses context.");
+      return;
+    }
+    try {
+      await sendMessage(token, message.chat.id, formatMosesContext(await getMosesContext("4H")));
+    } catch (error) {
+      logger.warn({ error }, "Telegram Moses context command failed");
+      await sendMessage(
+        token,
+        message.chat.id,
+        `Не удалось собрать полный контекст: ${error instanceof Error ? error.message : "внутренняя ошибка"}.`,
+      );
+    }
+    return;
+  }
   if (command !== "/btc") return;
 
   const timeframe = argument ?? "4H";
@@ -637,7 +786,13 @@ const handleMessage = async (token: string, message: TelegramMessage): Promise<v
 
   try {
     const data = await getBtcMarketAnalysis(timeframe);
-    await sendMessage(token, message.chat.id, formatAnalysis(data));
+    let sentiment: MarketSentiment | null = null;
+    try {
+      sentiment = await getCurrentMarketSentiment();
+    } catch (error) {
+      logger.warn({ error }, "Telegram market sentiment refresh failed during BTC analysis");
+    }
+    await sendMessage(token, message.chat.id, formatAnalysis(data, sentiment));
   } catch (error) {
     const reason =
       error instanceof BtcMarketDataError
