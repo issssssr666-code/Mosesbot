@@ -28,3 +28,17 @@ mtime_ms = 1790060133665
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:f9de5f6c-9e3b-4d79-8c5a-5a9ae87d6a64/26df0721-0c0c-44de-a41c-43619fa83e30/5a99e69e-44c4-427f-94c1-a14f7f2c44ef"
 storage_version_token = "1790060151434027"
 content_type = "image/jpeg"
+
+[[outputs]]
+id = "fneC-M-a3_W_a9y6dggFd"
+uri = "file://screenshots/btc-market-console-verification.jpg"
+type = "image"
+title = "BTC Market Console — проверка аналитики"
+description = "Свежий скриншот открытой консоли на таймфрейме 4H с RSI 14, EMA 21/50, MACD и блоком «Анализ Моисея»."
+logical_id = "24ce84a0-d98c-4bc5-a5c1-ba726c2ba4d3"
+content_hash = "sha256:3dde45f6dd169d04916193181da85f40adee91490b423c13dbd2293ee632c99c"
+size = 133290
+mtime_ms = 1790060255861
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:f9de5f6c-9e3b-4d79-8c5a-5a9ae87d6a64/24ce84a0-d98c-4bc5-a5c1-ba726c2ba4d3/e258dd35-92e0-451c-8a50-84e8877221bf"
+storage_version_token = "1790060262446491"
+content_type = "image/jpeg"
