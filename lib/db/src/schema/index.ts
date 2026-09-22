@@ -19,3 +19,4 @@
 
 export * from "./paper-trading";
 export * from "./market-community";
+export * from "./market-metrics";
