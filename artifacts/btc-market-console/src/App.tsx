@@ -18,6 +18,7 @@ import {
   MessageCircle,
   MoreHorizontal,
   Moon,
+  Newspaper,
   Pin,
   RefreshCw,
   Search,
