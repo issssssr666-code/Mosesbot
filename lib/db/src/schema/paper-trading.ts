@@ -185,6 +185,51 @@ export const backtestRunsTable = pgTable(
   }),
 );
 
+export const marketNewsTable = pgTable(
+  "market_news",
+  {
+    id: serial("id").primaryKey(),
+    source: text("source").notNull(),
+    sourceUrl: text("source_url").notNull(),
+    canonicalUrl: text("canonical_url").notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
+    title: text("title").notNull(),
+    summary: text("summary").notNull(),
+    category: text("category").notNull(),
+    sentiment: text("sentiment").notNull(),
+    impactScore: numeric("impact_score", { precision: 8, scale: 4 }).notNull(),
+    impactDirection: text("impact_direction").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    fingerprintIdentity: uniqueIndex("market_news_fingerprint_identity").on(table.fingerprint),
+    publishedAtIndex: index("market_news_published_at").on(table.publishedAt),
+  }),
+);
+
+export const sentimentHistoryTable = pgTable(
+  "sentiment_history",
+  {
+    id: serial("id").primaryKey(),
+    sentiment: text("sentiment").notNull(),
+    score: numeric("score", { precision: 8, scale: 4 }).notNull(),
+    newsCount: integer("news_count").notNull(),
+    positiveCount: integer("positive_count").notNull(),
+    neutralCount: integer("neutral_count").notNull(),
+    negativeCount: integer("negative_count").notNull(),
+    lookbackHours: integer("lookback_hours").notNull(),
+    risks: jsonb("risks").$type<string[]>().notNull(),
+    topNews: jsonb("top_news").$type<number[]>().notNull(),
+    calculatedAt: timestamp("calculated_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    calculatedAtIndex: index("sentiment_history_calculated_at").on(table.calculatedAt),
+  }),
+);
+
 export const paperScenarioObservationsTable = pgTable(
   "paper_scenario_observations",
   {
@@ -233,6 +278,14 @@ export const insertBacktestRunSchema = createInsertSchema(backtestRunsTable).omi
   id: true,
   createdAt: true,
 });
+export const insertMarketNewsSchema = createInsertSchema(marketNewsTable).omit({
+  id: true,
+  createdAt: true,
+});
+export const insertSentimentHistorySchema = createInsertSchema(sentimentHistoryTable).omit({
+  id: true,
+  createdAt: true,
+});
 
 export type InsertPaperAccount = z.infer<typeof insertPaperAccountSchema>;
 export type InsertPaperTrade = z.infer<typeof insertPaperTradeSchema>;
@@ -250,3 +303,5 @@ export type PaperAlertRecipient = typeof paperAlertRecipientsTable.$inferSelect;
 export type PaperAlertEvent = typeof paperAlertEventsTable.$inferSelect;
 export type PaperTradeJournal = typeof paperTradeJournalsTable.$inferSelect;
 export type BacktestRun = typeof backtestRunsTable.$inferSelect;
+export type MarketNews = typeof marketNewsTable.$inferSelect;
+export type SentimentHistory = typeof sentimentHistoryTable.$inferSelect;
