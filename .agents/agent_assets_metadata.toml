@@ -84,3 +84,17 @@ mtime_ms = 1790060983109
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:f9de5f6c-9e3b-4d79-8c5a-5a9ae87d6a64/ca9349ef-1911-46c4-9492-1108f0311f00/7efebc84-95c7-4d71-8174-55dadf0f60d6"
 storage_version_token = "1790060990431901"
 content_type = "image/jpeg"
+
+[[outputs]]
+id = "B3g6rAcBzuaTuaxstONUJ"
+uri = "file://screenshots/btc-market-console-analysis-verification.jpg"
+type = "image"
+title = "BTC Market Console — проверка анализа по таймфреймам"
+description = "Скриншот текущей консоли на 4H с реальными значениями Binance и блоком «Анализ Моисея»."
+logical_id = "adcf09fb-6180-4919-8e15-21a425ca2e65"
+content_hash = "sha256:4d9a1d5c6e603535c7c22800bcb9772e7231314ff65aea2c41701b9417b2bec5"
+size = 130739
+mtime_ms = 1790061148421
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:f9de5f6c-9e3b-4d79-8c5a-5a9ae87d6a64/adcf09fb-6180-4919-8e15-21a425ca2e65/fb05f68d-ec97-4bcd-955d-fe40c634b92a"
+storage_version_token = "1790061156611270"
+content_type = "image/jpeg"
