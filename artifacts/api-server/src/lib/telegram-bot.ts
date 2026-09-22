@@ -415,22 +415,21 @@ const handleMessage = async (token: string, message: TelegramMessage): Promise<v
     }
     try {
       await refreshPaperTrading();
-      const response =
-        subcommand === "alerts"
-          ? formatPaperAlerts(await getRecentPaperAlertEvents())
-          : (() => {
-              const snapshotPromise = getPaperAccountSnapshot();
-              return snapshotPromise.then((snapshot) =>
-                subcommand === "trades"
-                  ? formatPaperTrades(snapshot)
-                  : subcommand === "monitor"
-                    ? formatPaperMonitor(snapshot)
-                    : subcommand === "stats"
-                      ? formatPaperStats(snapshot)
-                      : formatPaperStatus(snapshot),
-              );
-            })();
-      await sendMessage(token, message.chat.id, await response);
+      let response: string;
+      if (subcommand === "alerts") {
+        response = formatPaperAlerts(await getRecentPaperAlertEvents());
+      } else {
+        const snapshot = await getPaperAccountSnapshot();
+        response =
+          subcommand === "trades"
+            ? formatPaperTrades(snapshot)
+            : subcommand === "monitor"
+              ? formatPaperMonitor(snapshot)
+              : subcommand === "stats"
+                ? formatPaperStats(snapshot)
+                : formatPaperStatus(snapshot);
+      }
+      await sendMessage(token, message.chat.id, response);
     } catch (error) {
       logger.warn({ error }, "Telegram paper trading command failed");
       await sendMessage(

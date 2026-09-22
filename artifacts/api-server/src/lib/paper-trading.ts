@@ -554,7 +554,7 @@ const applyClose = async (
     await recordPaperAlertEvent(updated, eventType, {
       ...commonPayload,
       previousScenario: trade.scenario,
-      newScenario: context.newScenario,
+      newScenario: context.newScenario ?? null,
       newClosedCandleTime: context.newClosedCandleTime?.toISOString() ?? null,
       cancellationReason: `Сценарий изменился на «${context.newScenario ?? "неизвестный"}»`,
       positionResult: numberValue(updated.netPnl),
