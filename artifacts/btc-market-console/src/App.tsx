@@ -230,8 +230,64 @@ const createTechnicalAnalysis = (points: TechnicalPoint[], price: number): Techn
     : price < latest.ema21 && latest.ema21 < latest.ema50
       ? 'Нисходящий'
       : 'Боковой';
-  const rsiState = latest.rsi >= 70 ? 'RSI показывает перегретость' : latest.rsi <= 30 ? 'RSI указывает на перепроданность' : 'RSI остаётся в нейтральной зоне';
-  const macdState = latest.histogram >= 0 ? 'MACD поддерживает импульс покупателей' : 'MACD указывает на ослабление импульса';
+  const averageVolume = recent.slice(-20).reduce((sum, point) => sum + point.volume, 0) / Math.min(20, recent.length);
+  const volumeRatio = averageVolume > 0 ? latest.volume / averageVolume : 1;
+  const priceVsEma21 = price >= latest.ema21 ? 'выше' : 'ниже';
+  const emaAlignment = latest.ema21 >= latest.ema50 ? 'выше' : 'ниже';
+  const trendSection: AnalysisSection = {
+    title: 'Тренд',
+    value: trend,
+    tone: trend === 'Восходящий' ? 'good' : trend === 'Нисходящий' ? 'warn' : 'neutral',
+    reason: `Цена ${formatPrice(price)} ${priceVsEma21} EMA 21 (${formatPrice(latest.ema21)}), а EMA 21 ${emaAlignment} EMA 50 (${formatPrice(latest.ema50)}).`,
+  };
+  const rsiState = latest.rsi >= 70
+    ? 'RSI показывает перегретость'
+    : latest.rsi <= 30
+      ? 'RSI указывает на перепроданность'
+      : latest.rsi >= 50
+        ? 'RSI выше нейтральной середины'
+        : 'RSI ниже нейтральной середины';
+  const macdState = latest.macd >= latest.signal
+    ? 'MACD выше сигнальной линии'
+    : 'MACD ниже сигнальной линии';
+  const impulseValue = latest.macd >= latest.signal && latest.rsi >= 50
+    ? 'Положительный'
+    : latest.macd < latest.signal && latest.rsi < 50
+      ? 'Отрицательный'
+      : 'Смешанный';
+  const impulseSection: AnalysisSection = {
+    title: 'Импульс',
+    value: impulseValue,
+    tone: impulseValue === 'Положительный' ? 'good' : impulseValue === 'Отрицательный' ? 'warn' : 'neutral',
+    reason: `RSI 14: ${latest.rsi.toFixed(1)} (${rsiState}); MACD ${latest.macd.toFixed(2)} против сигнала ${latest.signal.toFixed(2)}, гистограмма ${latest.histogram >= 0 ? 'положительная' : 'отрицательная'} (${latest.histogram.toFixed(2)}).`,
+  };
+  const volumeValue = volumeRatio >= 1.2 ? 'Выше среднего' : volumeRatio <= 0.8 ? 'Ниже среднего' : 'Около среднего';
+  const volumeSection: AnalysisSection = {
+    title: 'Объём',
+    value: volumeValue,
+    tone: volumeRatio >= 1.2 ? 'good' : volumeRatio <= 0.8 ? 'warn' : 'neutral',
+    reason: `Последняя свеча: ${formatCompactBtc(latest.volume)}; средний объём 20 свечей: ${formatCompactBtc(averageVolume)} (${(volumeRatio * 100).toFixed(0)}% от среднего).`,
+  };
+  const supportDistance = ((price - support) / price) * 100;
+  const resistanceDistance = ((resistance - price) / price) * 100;
+  const levelsSection: AnalysisSection = {
+    title: 'Ключевые уровни',
+    value: `${formatPrice(support)} — ${formatPrice(resistance)}`,
+    tone: resistanceDistance <= 2 ? 'warn' : supportDistance <= 2 ? 'good' : 'neutral',
+    reason: `Поддержка ${formatPrice(support)} находится на ${supportDistance.toFixed(1)}% ниже цены, сопротивление ${formatPrice(resistance)} — на ${resistanceDistance.toFixed(1)}% выше.`,
+  };
+  const trendScore = trend === 'Восходящий' ? 2 : trend === 'Нисходящий' ? -2 : 0;
+  const impulseScore = impulseValue === 'Положительный' ? 1 : impulseValue === 'Отрицательный' ? -1 : 0;
+  const volumeScore = volumeRatio >= 1.2 ? (trendScore > 0 ? 1 : trendScore < 0 ? -1 : 0) : 0;
+  const levelScore = resistanceDistance <= 2 ? -1 : supportDistance <= 2 ? 1 : 0;
+  const scenarioScore = trendScore + impulseScore + volumeScore + levelScore;
+  const scenarioValue = scenarioScore >= 2 ? 'Бычий сценарий' : scenarioScore <= -2 ? 'Медвежий сценарий' : 'Нейтральный сценарий';
+  const scenarioSection: AnalysisSection = {
+    title: 'Сценарий',
+    value: scenarioValue,
+    tone: scenarioValue === 'Бычий сценарий' ? 'good' : scenarioValue === 'Медвежий сценарий' ? 'warn' : 'neutral',
+    reason: `Вывод основан на связке «${trendSection.value} тренд», «${impulseSection.value} импульс», «${volumeSection.value.toLowerCase()}» и положении цены внутри рассчитанной зоны уровней.`,
+  };
   return {
     ema21: latest.ema21,
     ema50: latest.ema50,
@@ -243,7 +299,11 @@ const createTechnicalAnalysis = (points: TechnicalPoint[], price: number): Techn
     support,
     resistance,
     trend,
-    summary: `${trend} тренд относительно EMA 21/50. ${rsiState}; ${macdState}. Ближайшая рабочая зона — ${formatPrice(support)}–${formatPrice(resistance)}.`,
+    trendSection,
+    impulseSection,
+    volumeSection,
+    levelsSection,
+    scenarioSection,
   };
 };
 const filterLabels: Record<ValidationFilter, string> = {
@@ -550,12 +610,12 @@ function Home() {
                       <div className="grid h-12 w-12 place-items-center rounded-xl border border-primary/30 bg-primary/15 text-primary"><TrendingUp size={22} /></div>
                         <div><div className="data-mono text-[10px] uppercase tracking-[0.18em] text-secondary-foreground/45">Текущая позиция</div><div className="mt-1 text-xl font-semibold tracking-[-0.04em]">{analysis?.trend ?? 'Загрузка'}</div></div>
                     </div>
-                      <p className="mt-6 text-[13px] leading-[1.7] text-secondary-foreground/72">{analysis ? <>Цена <span className="font-semibold text-primary">{liveMarket ? formatPrice(liveMarket.price) : 'BTCUSDT'}</span> оценивается относительно EMA 21/50. Точка решения — <span className="font-semibold text-primary">{formatPrice(analysis.resistance)}</span>, а рабочая поддержка — <span className="font-semibold text-primary">{formatPrice(analysis.support)}</span>.</> : 'Получаем свечи Binance для расчёта технических показателей.'}</p>
+                      <p className="mt-6 text-[13px] leading-[1.7] text-secondary-foreground/72">{analysis ? analysis.scenarioSection.reason : 'Получаем свечи Binance для расчёта технических показателей.'}</p>
                     <div className="mt-6 space-y-3">
                       {[
-                          ['Сценарий', analysis ? `${analysis.trend} · RSI ${analysis.rsi.toFixed(1)}` : 'Ожидание данных', 'good'],
-                          ['MACD', analysis ? `${analysis.histogram >= 0 ? 'Положительный' : 'Отрицательный'} · ${analysis.macd.toFixed(2)}` : 'Ожидание данных', analysis && analysis.histogram < 0 ? 'warn' : 'good'],
-                          ['Риск', analysis ? `Зона ${formatPrice(analysis.support)}–${formatPrice(analysis.resistance)}` : 'Расчёт уровней', 'warn'],
+                          ['Сценарий', analysis ? analysis.scenarioSection.value : 'Ожидание данных', analysis?.scenarioSection.tone ?? 'neutral'],
+                          ['Импульс', analysis ? analysis.impulseSection.value : 'Ожидание данных', analysis?.impulseSection.tone ?? 'neutral'],
+                          ['Уровни', analysis ? analysis.levelsSection.value : 'Расчёт уровней', analysis?.levelsSection.tone ?? 'neutral'],
                       ].map(([label, value, tone]) => <div key={String(label)} className="flex items-center justify-between border-b border-secondary-foreground/10 pb-3 text-xs last:border-0 last:pb-0"><span className="text-secondary-foreground/45">{String(label)}</span><span className={`flex items-center gap-1.5 font-medium ${tone === 'warn' ? 'text-primary' : 'text-secondary-foreground/90'}`}><span className={`h-1.5 w-1.5 rounded-full ${tone === 'warn' ? 'bg-primary' : 'bg-emerald-400'}`} />{String(value)}</span></div>)}
                     </div>
                      <button data-testid="button-copy-brief" onClick={copyBrief} className="mt-7 flex w-full items-center justify-center gap-2 rounded-lg border border-secondary-foreground/15 bg-secondary-foreground/5 py-2.5 text-xs font-medium transition-colors hover:bg-primary hover:text-primary-foreground hover:border-primary"><BookOpen size={14} /> {briefPinned ? 'Сводка скопирована' : 'Скопировать сводку'}</button>
@@ -573,7 +633,15 @@ function Home() {
                    </div>
                    {analysis ? (
                      <>
-                       <p className="mt-4 text-[12px] leading-relaxed text-muted-foreground">{analysis.summary}</p>
+                       <div className="mt-4 space-y-2">
+                         {[analysis.trendSection, analysis.impulseSection, analysis.volumeSection, analysis.levelsSection, analysis.scenarioSection].map((section) => <div key={section.title} className="rounded-lg bg-muted/55 p-3">
+                           <div className="flex items-start justify-between gap-3">
+                             <span className="text-[11px] font-semibold">{section.title}</span>
+                             <span className={`text-right text-[11px] font-semibold ${section.tone === 'good' ? 'text-emerald-700 dark:text-emerald-300' : section.tone === 'warn' ? 'text-primary' : 'text-muted-foreground'}`}>{section.value}</span>
+                           </div>
+                           <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">{section.reason}</p>
+                         </div>)}
+                       </div>
                        <div className="mt-4 grid grid-cols-2 gap-2">
                          {[
                            ['EMA 21', formatPrice(analysis.ema21)],
