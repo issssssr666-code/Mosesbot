@@ -302,11 +302,11 @@ const handleMessage = async (token: string, message: TelegramMessage): Promise<v
   }
   if (command === "/paper") {
     const subcommand = argument?.toLowerCase() ?? "status";
-     if (!["status", "monitor", "trades", "stats"].includes(subcommand)) {
+    if (!["status", "monitor", "trades", "stats"].includes(subcommand)) {
       await sendMessage(
         token,
         message.chat.id,
-         "Используйте /paper, /paper status, /paper monitor, /paper trades или /paper stats.",
+        "Используйте /paper, /paper status, /paper monitor, /paper trades или /paper stats.",
       );
       return;
     }
@@ -318,9 +318,9 @@ const handleMessage = async (token: string, message: TelegramMessage): Promise<v
           ? formatPaperTrades(snapshot)
           : subcommand === "monitor"
             ? formatPaperMonitor(snapshot)
-          : subcommand === "stats"
-            ? formatPaperStats(snapshot)
-            : formatPaperStatus(snapshot);
+            : subcommand === "stats"
+              ? formatPaperStats(snapshot)
+              : formatPaperStatus(snapshot);
       await sendMessage(token, message.chat.id, response);
     } catch (error) {
       logger.warn({ error }, "Telegram paper trading command failed");
