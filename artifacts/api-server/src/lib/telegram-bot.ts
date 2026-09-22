@@ -72,7 +72,7 @@ const telegramRequest = async <T>(
 };
 
 const formatPrice = (value: number) =>
-  `$${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const formatBtc = (value: number) =>
   `${value.toLocaleString("en-US", { maximumFractionDigits: 2 })} BTC`;
@@ -83,6 +83,9 @@ const formatMoney = (value: number) =>
   `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const formatPnl = (value: number) => `${value >= 0 ? "+" : ""}${formatMoney(value)}`;
+
+const formatQuantity = (value: number) =>
+  `${value.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 8 })} BTC`;
 
 const timeframeLabel: Record<BtcTimeframe, string> = {
   "1H": "1H",
@@ -104,12 +107,24 @@ const helpText = [
   "TEST TRADING без реальных ордеров:",
   "/paper — состояние виртуального счёта",
   "/paper status — баланс и открытые позиции",
+  "/paper monitor — баланс, equity, P&L и детали позиций",
   "/paper trades — последние тестовые сделки",
   "/paper stats — статистика тестовой торговли",
 ].join("\n");
 
 const formatPaperPosition = (trade: PaperTradeView): string =>
   `#${trade.id} ${trade.timeframe} ${trade.direction} · вход ${formatPrice(trade.entryPrice)} · SL ${formatPrice(trade.stopLoss)} · TP1 ${formatPrice(trade.takeProfit1)} · TP2 ${formatPrice(trade.takeProfit2)}`;
+
+const formatPaperMonitorPosition = (trade: PaperTradeView): string =>
+  [
+    `#${trade.id} · ${trade.timeframe} ${trade.direction}`,
+    `Количество: ${formatQuantity(trade.remainingQuantity)}`,
+    `Вход: ${formatPrice(trade.entryPrice)} · текущая цена: ${
+      trade.currentPrice == null ? "недоступна" : formatPrice(trade.currentPrice)
+    }`,
+    `Текущий P&L: ${trade.currentPnl == null ? "недоступен" : formatPnl(trade.currentPnl)}`,
+    `SL: ${formatPrice(trade.stopLoss)} · TP1: ${formatPrice(trade.takeProfit1)} · TP2: ${formatPrice(trade.takeProfit2)}`,
+  ].join("\n");
 
 const formatPaperStatus = (snapshot: PaperAccountSnapshot): string =>
   [
@@ -122,6 +137,23 @@ const formatPaperStatus = (snapshot: PaperAccountSnapshot): string =>
     `Открытые позиции: ${snapshot.openPositions.length}`,
     snapshot.openPositions.length > 0
       ? snapshot.openPositions.map(formatPaperPosition).join("\n")
+      : "Открытых позиций нет.",
+  ].join("\n");
+
+const formatPaperMonitor = (snapshot: PaperAccountSnapshot): string =>
+  [
+    "TEST TRADING · мониторинг",
+    "Реальные ордера и торговые API-ключи не используются.",
+    "",
+    `Баланс: ${formatMoney(snapshot.balance)}`,
+    `Equity: ${formatMoney(snapshot.equity)}`,
+    `Реализованный P&L: ${formatPnl(snapshot.stats.realizedPnl)}`,
+    `Нереализованный P&L: ${formatPnl(snapshot.unrealizedPnl)}`,
+    `Максимальная просадка: ${formatMoney(snapshot.stats.maxDrawdown)}`,
+    "",
+    `Открытые позиции: ${snapshot.openPositions.length}`,
+    snapshot.openPositions.length > 0
+      ? snapshot.openPositions.map(formatPaperMonitorPosition).join("\n\n")
       : "Открытых позиций нет.",
   ].join("\n");
 
@@ -143,10 +175,14 @@ const formatPaperStats = (snapshot: PaperAccountSnapshot): string =>
     "TEST TRADING · статистика",
     `Баланс: ${formatMoney(snapshot.balance)}`,
     `Сделок всего: ${snapshot.stats.tradeCount}`,
+    `Сигналы LONG / SHORT / neutral: ${snapshot.stats.longSignalCount} / ${snapshot.stats.shortSignalCount} / ${snapshot.stats.neutralSignalCount}`,
+    `Отменено по смене сценария: ${snapshot.stats.cancelledTradeCount}`,
     `Закрыто: ${snapshot.stats.closedTradeCount}`,
     `Прибыльных / убыточных: ${snapshot.stats.profitableTradeCount} / ${snapshot.stats.losingTradeCount}`,
     `Прибыль/убыток: ${formatPnl(snapshot.stats.realizedPnl)}`,
     `Процент прибыльных: ${snapshot.stats.winRate.toFixed(2)}%`,
+    `Средняя прибыль: ${formatPnl(snapshot.stats.averageWin)}`,
+    `Средний убыток: ${formatPnl(snapshot.stats.averageLoss)}`,
     `Средний результат: ${formatPnl(snapshot.stats.averageResult)}`,
     `Максимальная просадка: ${formatMoney(snapshot.stats.maxDrawdown)}`,
     `Profit factor: ${snapshot.stats.profitFactor == null ? "не рассчитан" : snapshot.stats.profitFactor.toFixed(2)}`,
@@ -266,11 +302,11 @@ const handleMessage = async (token: string, message: TelegramMessage): Promise<v
   }
   if (command === "/paper") {
     const subcommand = argument?.toLowerCase() ?? "status";
-    if (!["status", "trades", "stats"].includes(subcommand)) {
+     if (!["status", "monitor", "trades", "stats"].includes(subcommand)) {
       await sendMessage(
         token,
         message.chat.id,
-        "Используйте /paper, /paper status, /paper trades или /paper stats.",
+         "Используйте /paper, /paper status, /paper monitor, /paper trades или /paper stats.",
       );
       return;
     }
@@ -280,6 +316,8 @@ const handleMessage = async (token: string, message: TelegramMessage): Promise<v
       const response =
         subcommand === "trades"
           ? formatPaperTrades(snapshot)
+          : subcommand === "monitor"
+            ? formatPaperMonitor(snapshot)
           : subcommand === "stats"
             ? formatPaperStats(snapshot)
             : formatPaperStatus(snapshot);

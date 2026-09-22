@@ -463,6 +463,7 @@ export const refreshPaperTrading = async (): Promise<void> => {
 export const getPaperAccountSnapshot = async (): Promise<PaperAccountSnapshot> => {
   const account = await ensurePaperAccount();
   const trades = await getAllTrades();
+  const observations = await getScenarioObservations();
   const openPositions = trades.filter((trade) => trade.status === "open");
   const closedTrades = trades.filter((trade) => trade.status === "closed");
   const openAnalyses = await Promise.all(
@@ -478,27 +479,49 @@ export const getPaperAccountSnapshot = async (): Promise<PaperAccountSnapshot> =
     if (price == null) return sum;
     return sum + positionPnl(trade, price, numberValue(trade.remainingQuantity)).net;
   }, 0);
+  const viewForTrade = (trade: PaperTrade): PaperTradeView => {
+    const currentPrice = trade.status === "open" ? currentPrices.get(trade.timeframe) ?? null : null;
+    const currentPnl =
+      currentPrice == null
+        ? null
+        : positionPnl(trade, currentPrice, numberValue(trade.remainingQuantity)).net;
+    return tradeView(trade, currentPrice, currentPnl);
+  };
   const realizedPnl = closedTrades.reduce((sum, trade) => sum + numberValue(trade.netPnl), 0);
   const profitableTrades = closedTrades.filter((trade) => numberValue(trade.netPnl) > 0);
   const losingTrades = closedTrades.filter((trade) => numberValue(trade.netPnl) < 0);
   const grossProfit = profitableTrades.reduce((sum, trade) => sum + numberValue(trade.netPnl), 0);
   const grossLoss = losingTrades.reduce((sum, trade) => sum + numberValue(trade.netPnl), 0);
+  const longSignalCount = trades.filter((trade) => trade.direction === "LONG").length;
+  const shortSignalCount = trades.filter((trade) => trade.direction === "SHORT").length;
+  const neutralSignalCount = observations.filter((observation) => observation.direction == null).length;
+  const cancelledTradeCount = closedTrades.filter(
+    (trade) => trade.exitReason === "SCENARIO_CANCELLED",
+  ).length;
   const averageResult = closedTrades.length > 0 ? realizedPnl / closedTrades.length : 0;
   const winRate = closedTrades.length > 0 ? (profitableTrades.length / closedTrades.length) * 100 : 0;
+  const averageWin = profitableTrades.length > 0 ? grossProfit / profitableTrades.length : 0;
+  const averageLoss = losingTrades.length > 0 ? grossLoss / losingTrades.length : 0;
 
   return {
     balance: numberValue(account.balance),
     equity: numberValue(account.balance) + unrealizedPnl,
     unrealizedPnl,
-    openPositions: openPositions.map(tradeView),
-    recentTrades: trades.slice(0, 10).map(tradeView),
+    openPositions: openPositions.map(viewForTrade),
+    recentTrades: trades.slice(0, 10).map(viewForTrade),
     stats: {
       tradeCount: trades.length,
+      longSignalCount,
+      shortSignalCount,
+      neutralSignalCount,
+      cancelledTradeCount,
       closedTradeCount: closedTrades.length,
       profitableTradeCount: profitableTrades.length,
       losingTradeCount: losingTrades.length,
       realizedPnl,
       winRate,
+      averageWin,
+      averageLoss,
       averageResult,
       maxDrawdown: numberValue(account.maxDrawdown),
       profitFactor: grossLoss < 0 ? grossProfit / Math.abs(grossLoss) : null,
