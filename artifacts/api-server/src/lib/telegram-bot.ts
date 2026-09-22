@@ -100,7 +100,58 @@ const helpText = [
   "/btc 4h — анализ за 4 часа",
   "/btc 1d — дневной анализ",
   "/btc 1w — недельный анализ",
+  "",
+  "TEST TRADING без реальных ордеров:",
+  "/paper — состояние виртуального счёта",
+  "/paper status — баланс и открытые позиции",
+  "/paper trades — последние тестовые сделки",
+  "/paper stats — статистика тестовой торговли",
 ].join("\n");
+
+const formatPaperPosition = (trade: PaperTradeView): string =>
+  `#${trade.id} ${trade.timeframe} ${trade.direction} · вход ${formatPrice(trade.entryPrice)} · SL ${formatPrice(trade.stopLoss)} · TP1 ${formatPrice(trade.takeProfit1)} · TP2 ${formatPrice(trade.takeProfit2)}`;
+
+const formatPaperStatus = (snapshot: PaperAccountSnapshot): string =>
+  [
+    "TEST TRADING · виртуальный счёт",
+    "Реальные ордера и торговые API-ключи не используются.",
+    "",
+    `Баланс: ${formatMoney(snapshot.balance)}`,
+    `Оценка счёта: ${formatMoney(snapshot.equity)}`,
+    `Нереализованный P&L: ${formatPnl(snapshot.unrealizedPnl)}`,
+    `Открытые позиции: ${snapshot.openPositions.length}`,
+    snapshot.openPositions.length > 0
+      ? snapshot.openPositions.map(formatPaperPosition).join("\n")
+      : "Открытых позиций нет.",
+  ].join("\n");
+
+const formatPaperTrades = (snapshot: PaperAccountSnapshot): string =>
+  [
+    "TEST TRADING · последние сделки",
+    snapshot.recentTrades.length > 0
+      ? snapshot.recentTrades
+          .map((trade) => {
+            const exit = trade.exitPrice == null ? "открыта" : `выход ${formatPrice(trade.exitPrice)}`;
+            return `#${trade.id} · ${trade.timeframe} ${trade.direction} · ${trade.status} · вход ${formatPrice(trade.entryPrice)} · ${exit} · P&L ${formatPnl(trade.netPnl)}${trade.exitReason ? ` · ${trade.exitReason}` : ""}`;
+          })
+          .join("\n")
+      : "Журнал пока пуст.",
+  ].join("\n");
+
+const formatPaperStats = (snapshot: PaperAccountSnapshot): string =>
+  [
+    "TEST TRADING · статистика",
+    `Баланс: ${formatMoney(snapshot.balance)}`,
+    `Сделок всего: ${snapshot.stats.tradeCount}`,
+    `Закрыто: ${snapshot.stats.closedTradeCount}`,
+    `Прибыльных / убыточных: ${snapshot.stats.profitableTradeCount} / ${snapshot.stats.losingTradeCount}`,
+    `Прибыль/убыток: ${formatPnl(snapshot.stats.realizedPnl)}`,
+    `Процент прибыльных: ${snapshot.stats.winRate.toFixed(2)}%`,
+    `Средний результат: ${formatPnl(snapshot.stats.averageResult)}`,
+    `Максимальная просадка: ${formatMoney(snapshot.stats.maxDrawdown)}`,
+    `Profit factor: ${snapshot.stats.profitFactor == null ? "не рассчитан" : snapshot.stats.profitFactor.toFixed(2)}`,
+    `Expectancy: ${formatPnl(snapshot.stats.expectancy)}`,
+  ].join("\n");
 
 const formatAnalysis = (data: BtcMarketAnalysis): string => {
   const { price } = data.market;
