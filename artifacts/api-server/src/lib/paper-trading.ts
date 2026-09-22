@@ -547,7 +547,8 @@ const applyClose = async (
       ...commonPayload,
       entryPrice: numberValue(updated.entryPrice),
       closePrice: pnl.exitPrice,
-      loss: numberValue(updated.netPnl),
+      loss: pnl.net,
+      finalPnl: numberValue(updated.netPnl),
       closeReason: "Стоп-лосс",
     });
   } else if (eventType === "SCENARIO_CANCELLED") {
