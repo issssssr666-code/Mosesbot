@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   Activity,
@@ -37,6 +37,7 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  Line,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -59,7 +60,19 @@ type Asset = {
   note: string;
 };
 
-type ChartPoint = { label: string; value: number };
+type TechnicalPoint = {
+  label: string;
+  value: number;
+  high: number;
+  low: number;
+  volume: number;
+  ema21: number | null;
+  ema50: number | null;
+  rsi: number | null;
+  macd: number | null;
+  signal: number | null;
+  histogram: number | null;
+};
 type LiveMarket = {
   price: number;
   move: number;
@@ -74,14 +87,27 @@ type BinanceTicker = {
   lowPrice: string;
   quoteVolume: string;
 };
-type BinanceKline = [number, string, string, string, string, string, number];
+type BinanceKline = [number, string, string, string, string, string, number, string];
+type TechnicalAnalysis = {
+  ema21: number;
+  ema50: number;
+  rsi: number;
+  macd: number;
+  signal: number;
+  histogram: number;
+  volume: number;
+  support: number;
+  resistance: number;
+  trend: 'Восходящий' | 'Нисходящий' | 'Боковой';
+  summary: string;
+};
 
 const BINANCE_API = 'https://api.binance.com/api/v3';
-const timeframeRequests: Record<Timeframe, { interval: string; limit: number }> = {
-  '1H': { interval: '5m', limit: 12 },
-  '4H': { interval: '15m', limit: 16 },
-  '1D': { interval: '1h', limit: 24 },
-  '1W': { interval: '4h', limit: 42 },
+const timeframeRequests: Record<Timeframe, { interval: string; historyLimit: number; displayLimit: number }> = {
+  '1H': { interval: '5m', historyLimit: 200, displayLimit: 12 },
+  '4H': { interval: '15m', historyLimit: 200, displayLimit: 16 },
+  '1D': { interval: '1h', historyLimit: 200, displayLimit: 24 },
+  '1W': { interval: '4h', historyLimit: 200, displayLimit: 42 },
 };
 
 const watchlist: Asset[] = [
