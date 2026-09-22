@@ -431,7 +431,7 @@ export const getPaperAccountSnapshot = async (): Promise<PaperAccountSnapshot> =
       getBtcMarketAnalysis(timeframe),
     ),
   );
-  const currentPrices = new Map(
+  const currentPrices = new Map<string, number>(
     openAnalyses.map((analysis) => [analysis.timeframe, analysis.market.price]),
   );
   const unrealizedPnl = openPositions.reduce((sum, trade) => {
